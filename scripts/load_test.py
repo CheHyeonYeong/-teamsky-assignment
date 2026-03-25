@@ -11,9 +11,6 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-BASE_URL = "http://localhost:8080"
-
-
 def read_problem_request():
     params = urllib.parse.urlencode(
         {
@@ -101,9 +98,9 @@ def percentile(samples, p):
     return ordered[index]
 
 
-def make_request(request_factory, timeout):
+def make_request(base_url, request_factory, timeout):
     method, path, body, headers = request_factory()
-    url = BASE_URL + path
+    url = base_url + path
     started = time.perf_counter()
     request = urllib.request.Request(url=url, data=body, method=method, headers=headers)
 
@@ -145,12 +142,14 @@ def make_request(request_factory, timeout):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--scenario", choices=sorted(SCENARIOS), required=True)
+    parser.add_argument("--base-url", default="http://localhost:8080")
     parser.add_argument("--requests", type=int, default=500)
     parser.add_argument("--concurrency", type=int, default=20)
     parser.add_argument("--timeout", type=float, default=10.0)
     args = parser.parse_args()
 
     request_factory = SCENARIOS[args.scenario]
+    base_url = args.base_url.rstrip("/")
     latencies = []
     status_counts = Counter()
     errors = []
@@ -159,7 +158,10 @@ def main():
     lock = threading.Lock()
 
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-        futures = [pool.submit(make_request, request_factory, args.timeout) for _ in range(args.requests)]
+        futures = [
+            pool.submit(make_request, base_url, request_factory, args.timeout)
+            for _ in range(args.requests)
+        ]
         for future in as_completed(futures):
             result = future.result()
             with lock:
@@ -179,6 +181,7 @@ def main():
     duration = time.perf_counter() - started
     report = {
         "scenario": args.scenario,
+        "base_url": base_url,
         "requests": args.requests,
         "concurrency": args.concurrency,
         "duration_sec": round(duration, 3),
