@@ -185,8 +185,8 @@ INSERT INTO answers (problem_id, answer_value) VALUES
 (5, '2');
 
 INSERT INTO problem_stats (problem_id, total_count, correct_count) VALUES
-(1, 50, 35),
-(2, 45, 40),
-(3, 30, 25),
-(4, 25, 15),
-(5, 20, 8);
+(1, 0, 0),
+(2, 0, 0),
+(3, 0, 0),
+(4, 0, 0),
+(5, 0, 0);

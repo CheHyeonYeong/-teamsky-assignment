@@ -58,6 +58,35 @@ CREATE TABLE IF NOT EXISTS user_chapter_submission_stats (
     INDEX idx_user_chapter_submission_stats_user_chapter (user_id, chapter_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+INSERT INTO problem_stats (
+    problem_id,
+    total_count,
+    correct_count
+)
+SELECT
+    p.id,
+    COALESCE(first_attempts.total_users, 0) AS total_count,
+    COALESCE(first_attempts.correct_users, 0) AS correct_count
+FROM problems p
+LEFT JOIN (
+    SELECT
+        first_submission.problem_id,
+        COUNT(*) AS total_users,
+        SUM(CASE WHEN first_submission.answer_status = 'CORRECT' THEN 1 ELSE 0 END) AS correct_users
+    FROM submissions first_submission
+    JOIN (
+        SELECT user_id, problem_id, MIN(id) AS first_submission_id
+        FROM submissions
+        GROUP BY user_id, problem_id
+    ) grouped
+        ON grouped.first_submission_id = first_submission.id
+    GROUP BY first_submission.problem_id
+) first_attempts
+    ON first_attempts.problem_id = p.id
+ON DUPLICATE KEY UPDATE
+    total_count = VALUES(total_count),
+    correct_count = VALUES(correct_count);
+
 INSERT INTO user_problem_state (
     user_id,
     problem_id,
