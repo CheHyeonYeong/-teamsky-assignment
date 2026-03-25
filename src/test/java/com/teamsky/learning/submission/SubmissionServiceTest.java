@@ -3,11 +3,16 @@ package com.teamsky.learning.submission;
 import com.teamsky.learning.chapter.ChapterService;
 import com.teamsky.learning.chapter.entity.Chapter;
 import com.teamsky.learning.problem.ProblemService;
-import com.teamsky.learning.problem.entity.*;
+import com.teamsky.learning.problem.entity.Answer;
+import com.teamsky.learning.problem.entity.Choice;
+import com.teamsky.learning.problem.entity.Difficulty;
+import com.teamsky.learning.problem.entity.Problem;
+import com.teamsky.learning.problem.entity.ProblemType;
 import com.teamsky.learning.stats.StatsService;
 import com.teamsky.learning.submission.entity.AnswerStatus;
-import com.teamsky.learning.submission.entity.SkippedProblem;
 import com.teamsky.learning.submission.entity.Submission;
+import com.teamsky.learning.submission.entity.UserChapterState;
+import com.teamsky.learning.submission.entity.UserProblemState;
 import com.teamsky.learning.submission.request.SkipRequest;
 import com.teamsky.learning.submission.request.SubmitRequest;
 import com.teamsky.learning.submission.response.SubmitResponse;
@@ -22,16 +27,21 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("SubmissionService 테스트")
+@DisplayName("SubmissionService tests")
 class SubmissionServiceTest {
 
     @InjectMocks
@@ -41,7 +51,10 @@ class SubmissionServiceTest {
     private SubmissionRepository submissionRepository;
 
     @Mock
-    private SkippedProblemRepository skippedProblemRepository;
+    private UserProblemStateRepository userProblemStateRepository;
+
+    @Mock
+    private UserChapterStateRepository userChapterStateRepository;
 
     @Mock
     private UserService userService;
@@ -57,330 +70,307 @@ class SubmissionServiceTest {
 
     private User testUser;
     private Chapter testChapter;
-    private Problem testProblem;
+    private Problem multipleChoiceProblem;
+    private Problem subjectiveProblem;
 
     @BeforeEach
     void setUp() {
         testUser = User.builder()
-                .name("테스트 사용자")
+                .name("Test User")
                 .email("test@example.com")
                 .build();
+        ReflectionTestUtils.setField(testUser, "id", 1L);
 
         testChapter = Chapter.builder()
-                .name("테스트 단원")
-                .description("테스트 단원 설명")
+                .name("Chapter 1")
+                .description("Basic chapter")
                 .orderNum(1)
                 .build();
+        ReflectionTestUtils.setField(testChapter, "id", 1L);
+
+        multipleChoiceProblem = Problem.builder()
+                .chapter(testChapter)
+                .content("Select all correct choices.")
+                .problemType(ProblemType.MULTIPLE_CHOICE)
+                .difficulty(Difficulty.MEDIUM)
+                .explanation("Explanation")
+                .build();
+        ReflectionTestUtils.setField(multipleChoiceProblem, "id", 1L);
+        multipleChoiceProblem.addAnswer(Answer.builder().answerValue("1").build());
+        multipleChoiceProblem.addAnswer(Answer.builder().answerValue("2").build());
+        for (int i = 1; i <= 5; i++) {
+            multipleChoiceProblem.addChoice(Choice.builder()
+                    .choiceNumber(i)
+                    .content("Choice " + i)
+                    .build());
+        }
+
+        subjectiveProblem = Problem.builder()
+                .chapter(testChapter)
+                .content("What is the capital of Korea?")
+                .problemType(ProblemType.SUBJECTIVE)
+                .difficulty(Difficulty.LOW)
+                .explanation("Seoul is the capital.")
+                .build();
+        ReflectionTestUtils.setField(subjectiveProblem, "id", 1L);
+        subjectiveProblem.addAnswer(Answer.builder().answerValue("Seoul").build());
     }
 
     @Nested
-    @DisplayName("객관식 정답 판정")
+    @DisplayName("Multiple choice judging")
     class MultipleChoiceJudgement {
 
-        @BeforeEach
-        void setUp() {
-            testProblem = Problem.builder()
-                    .chapter(testChapter)
-                    .content("다음 중 옳은 것을 모두 고르시오.")
-                    .problemType(ProblemType.MULTIPLE_CHOICE)
-                    .difficulty(Difficulty.MEDIUM)
-                    .explanation("정답 해설입니다.")
-                    .build();
-
-            Answer answer1 = Answer.builder().answerValue("1").build();
-            Answer answer2 = Answer.builder().answerValue("2").build();
-            testProblem.addAnswer(answer1);
-            testProblem.addAnswer(answer2);
-
-            for (int i = 1; i <= 5; i++) {
-                Choice choice = Choice.builder()
-                        .choiceNumber(i)
-                        .content("선택지 " + i)
-                        .build();
-                testProblem.addChoice(choice);
-            }
-        }
-
         @Test
-        @DisplayName("모든 정답을 선택하면 CORRECT 반환")
+        @DisplayName("returns CORRECT when all answers match")
         void shouldReturnCorrectWhenAllAnswersMatch() {
-            // given
-            given(userService.findById(1L)).willReturn(testUser);
-            given(problemService.findById(1L)).willReturn(testProblem);
-            given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+            stubMultipleChoiceSubmit();
 
             SubmitRequest request = new SubmitRequest(
                     1L, 1L, ProblemType.MULTIPLE_CHOICE,
                     List.of(1, 2), null, null, false
             );
 
-            // when
             SubmitResponse response = submissionService.submit(request);
 
-            // then
             assertThat(response.answerStatus()).isEqualTo(AnswerStatus.CORRECT);
         }
 
         @Test
-        @DisplayName("일부 정답만 선택하면 PARTIAL 반환")
+        @DisplayName("returns PARTIAL when only a subset of correct answers is selected")
         void shouldReturnPartialWhenSomeAnswersMatch() {
-            // given
-            given(userService.findById(1L)).willReturn(testUser);
-            given(problemService.findById(1L)).willReturn(testProblem);
-            given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+            stubMultipleChoiceSubmit();
 
             SubmitRequest request = new SubmitRequest(
                     1L, 1L, ProblemType.MULTIPLE_CHOICE,
                     List.of(1), null, null, false
             );
 
-            // when
             SubmitResponse response = submissionService.submit(request);
 
-            // then
             assertThat(response.answerStatus()).isEqualTo(AnswerStatus.PARTIAL);
         }
 
         @Test
-        @DisplayName("정답과 오답을 함께 선택하면 WRONG 반환")
+        @DisplayName("returns WRONG when correct and wrong answers are mixed")
         void shouldReturnWrongWhenContainsCorrectAndWrong() {
-            // given
-            given(userService.findById(1L)).willReturn(testUser);
-            given(problemService.findById(1L)).willReturn(testProblem);
-            given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+            stubMultipleChoiceSubmit();
 
             SubmitRequest request = new SubmitRequest(
                     1L, 1L, ProblemType.MULTIPLE_CHOICE,
                     List.of(1, 3), null, null, false
             );
 
-            // when
             SubmitResponse response = submissionService.submit(request);
 
-            // then
             assertThat(response.answerStatus()).isEqualTo(AnswerStatus.WRONG);
         }
 
         @Test
-        @DisplayName("정답이 하나도 없으면 WRONG 반환")
-        void shouldReturnWrongWhenNoCorrectAnswers() {
-            // given
-            given(userService.findById(1L)).willReturn(testUser);
-            given(problemService.findById(1L)).willReturn(testProblem);
-            given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
-
-            SubmitRequest request = new SubmitRequest(
-                    1L, 1L, ProblemType.MULTIPLE_CHOICE,
-                    List.of(3, 4), null, null, false
-            );
-
-            // when
-            SubmitResponse response = submissionService.submit(request);
-
-            // then
-            assertThat(response.answerStatus()).isEqualTo(AnswerStatus.WRONG);
-        }
-
-        @Test
-        @DisplayName("힌트 사용 시 통계 업데이트 하지 않음")
+        @DisplayName("does not update stats when a hint was used")
         void shouldNotUpdateStatsWhenHintUsed() {
-            // given
-            given(userService.findById(1L)).willReturn(testUser);
-            given(problemService.findById(1L)).willReturn(testProblem);
-            given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+            stubMultipleChoiceSubmit();
 
             SubmitRequest request = new SubmitRequest(
                     1L, 1L, ProblemType.MULTIPLE_CHOICE,
                     List.of(1, 2), null, null, true
             );
 
-            // when
             submissionService.submit(request);
 
-            // then
             verify(statsService, never()).updateStats(anyLong(), anyBoolean());
         }
     }
 
     @Nested
-    @DisplayName("주관식 정답 판정")
+    @DisplayName("Subjective judging")
     class SubjectiveJudgement {
 
-        @BeforeEach
-        void setUp() {
-            testProblem = Problem.builder()
-                    .chapter(testChapter)
-                    .content("대한민국의 수도는?")
-                    .problemType(ProblemType.SUBJECTIVE)
-                    .difficulty(Difficulty.LOW)
-                    .explanation("대한민국의 수도는 서울입니다.")
-                    .build();
-
-            Answer answer = Answer.builder().answerValue("서울").build();
-            testProblem.addAnswer(answer);
-        }
-
         @Test
-        @DisplayName("정답과 일치하면 CORRECT 반환")
+        @DisplayName("returns CORRECT when the answer matches")
         void shouldReturnCorrectWhenAnswerMatches() {
-            // given
-            given(userService.findById(1L)).willReturn(testUser);
-            given(problemService.findById(1L)).willReturn(testProblem);
-            given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+            stubSubjectiveSubmit();
 
             SubmitRequest request = new SubmitRequest(
                     1L, 1L, ProblemType.SUBJECTIVE,
-                    null, "서울", null, false
+                    null, "Seoul", null, false
             );
 
-            // when
             SubmitResponse response = submissionService.submit(request);
 
-            // then
             assertThat(response.answerStatus()).isEqualTo(AnswerStatus.CORRECT);
         }
 
         @Test
-        @DisplayName("대소문자 무시하고 정답 판정")
+        @DisplayName("ignores case when judging subjective answers")
         void shouldIgnoreCaseWhenJudging() {
-            // given
-            testProblem = Problem.builder()
-                    .chapter(testChapter)
-                    .content("What is the capital of Korea?")
-                    .problemType(ProblemType.SUBJECTIVE)
-                    .difficulty(Difficulty.LOW)
-                    .explanation("Seoul is the capital.")
-                    .build();
-            Answer answer = Answer.builder().answerValue("Seoul").build();
-            testProblem.addAnswer(answer);
-
-            given(userService.findById(1L)).willReturn(testUser);
-            given(problemService.findById(1L)).willReturn(testProblem);
-            given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+            stubSubjectiveSubmit();
 
             SubmitRequest request = new SubmitRequest(
                     1L, 1L, ProblemType.SUBJECTIVE,
                     null, "SEOUL", null, false
             );
 
-            // when
             SubmitResponse response = submissionService.submit(request);
 
-            // then
             assertThat(response.answerStatus()).isEqualTo(AnswerStatus.CORRECT);
         }
 
         @Test
-        @DisplayName("정답과 일치하지 않으면 WRONG 반환")
+        @DisplayName("returns WRONG when the answer does not match")
         void shouldReturnWrongWhenAnswerDoesNotMatch() {
-            // given
-            given(userService.findById(1L)).willReturn(testUser);
-            given(problemService.findById(1L)).willReturn(testProblem);
-            given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+            stubSubjectiveSubmit();
 
             SubmitRequest request = new SubmitRequest(
                     1L, 1L, ProblemType.SUBJECTIVE,
-                    null, "부산", null, false
+                    null, "Busan", null, false
             );
 
-            // when
             SubmitResponse response = submissionService.submit(request);
 
-            // then
             assertThat(response.answerStatus()).isEqualTo(AnswerStatus.WRONG);
         }
 
         @Test
-        @DisplayName("빈 답안 제출 시 WRONG 반환")
-        void shouldReturnWrongWhenAnswerIsEmpty() {
-            // given
-            given(userService.findById(1L)).willReturn(testUser);
-            given(problemService.findById(1L)).willReturn(testProblem);
-            given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+        @DisplayName("returns WRONG for a blank answer")
+        void shouldReturnWrongWhenAnswerIsBlank() {
+            stubSubjectiveSubmit();
 
             SubmitRequest request = new SubmitRequest(
                     1L, 1L, ProblemType.SUBJECTIVE,
                     null, "", null, false
             );
 
-            // when
             SubmitResponse response = submissionService.submit(request);
 
-            // then
             assertThat(response.answerStatus()).isEqualTo(AnswerStatus.WRONG);
         }
     }
 
-    @Nested
-    @DisplayName("제출 시간 기록")
-    class TimeSpentRecording {
+    @Test
+    @DisplayName("records time spent in the saved submission")
+    void shouldRecordTimeSpent() {
+        given(userService.findById(1L)).willReturn(testUser);
+        given(problemService.findById(1L)).willReturn(subjectiveProblem);
+        given(userProblemStateRepository.findByUser_IdAndProblem_Id(1L, 1L)).willReturn(Optional.empty());
 
-        @BeforeEach
-        void setUp() {
-            testProblem = Problem.builder()
-                    .chapter(testChapter)
-                    .content("테스트 문제")
-                    .problemType(ProblemType.SUBJECTIVE)
-                    .difficulty(Difficulty.LOW)
-                    .explanation("해설")
-                    .build();
-            Answer answer = Answer.builder().answerValue("정답").build();
-            testProblem.addAnswer(answer);
-        }
+        ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
+        given(submissionRepository.save(submissionCaptor.capture())).willAnswer(invocation -> invocation.getArgument(0));
 
-        @Test
-        @DisplayName("제출 시 소요 시간이 저장됨")
-        void shouldRecordTimeSpent() {
-            // given
-            given(userService.findById(1L)).willReturn(testUser);
-            given(problemService.findById(1L)).willReturn(testProblem);
+        SubmitRequest request = new SubmitRequest(
+                1L, 1L, ProblemType.SUBJECTIVE,
+                null, "Seoul", 120L, false
+        );
 
-            ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
-            given(submissionRepository.save(submissionCaptor.capture())).willAnswer(invocation -> invocation.getArgument(0));
+        submissionService.submit(request);
 
-            SubmitRequest request = new SubmitRequest(
-                    1L, 1L, ProblemType.SUBJECTIVE,
-                    null, "정답", 120L, false
-            );
-
-            // when
-            submissionService.submit(request);
-
-            // then
-            Submission savedSubmission = submissionCaptor.getValue();
-            assertThat(savedSubmission.getTimeSpentSeconds()).isEqualTo(120L);
-        }
+        assertThat(submissionCaptor.getValue().getTimeSpentSeconds()).isEqualTo(120L);
     }
 
-    @Nested
-    @DisplayName("문제 넘기기")
-    class SkipProblemHandling {
+    @Test
+    @DisplayName("creates a new user problem state on first submission")
+    void shouldCreateUserProblemStateOnFirstSubmission() {
+        given(userService.findById(1L)).willReturn(testUser);
+        given(problemService.findById(1L)).willReturn(subjectiveProblem);
+        given(userProblemStateRepository.findByUser_IdAndProblem_Id(1L, 1L)).willReturn(Optional.empty());
+        given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
 
-        @BeforeEach
-        void setUp() {
-            testProblem = Problem.builder()
-                    .chapter(testChapter)
-                    .content("건너뛸 문제")
-                    .problemType(ProblemType.SUBJECTIVE)
-                    .difficulty(Difficulty.LOW)
-                    .explanation("해설")
-                    .build();
-        }
+        SubmitRequest request = new SubmitRequest(
+                1L, 1L, ProblemType.SUBJECTIVE,
+                null, "Seoul", null, false
+        );
 
-        @Test
-        @DisplayName("같은 단원 이전 skip 기록을 지우고 마지막 1건만 남긴다")
-        void shouldReplacePreviousSkipStateWithinChapter() {
-            given(userService.findById(1L)).willReturn(testUser);
-            given(problemService.findById(1L)).willReturn(testProblem);
-            given(chapterService.findById(1L)).willReturn(testChapter);
-            given(skippedProblemRepository.save(any(SkippedProblem.class))).willAnswer(invocation -> invocation.getArgument(0));
+        submissionService.submit(request);
 
-            SkipRequest request = new SkipRequest(1L, 1L, 1L);
+        ArgumentCaptor<UserProblemState> stateCaptor = ArgumentCaptor.forClass(UserProblemState.class);
+        verify(userProblemStateRepository).save(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().getAttemptCount()).isEqualTo(1L);
+        assertThat(stateCaptor.getValue().getLastAnswerStatus()).isEqualTo(AnswerStatus.CORRECT);
+        assertThat(stateCaptor.getValue().isSolved()).isTrue();
+    }
 
-            submissionService.skipProblem(request);
+    @Test
+    @DisplayName("updates the existing user problem state on resubmission")
+    void shouldUpdateExistingUserProblemStateOnResubmission() {
+        Submission previousSubmission = Submission.builder()
+                .user(testUser)
+                .problem(subjectiveProblem)
+                .answerStatus(AnswerStatus.WRONG)
+                .userAnswer("Busan")
+                .timeSpentSeconds(10L)
+                .hintUsed(false)
+                .build();
 
-            verify(skippedProblemRepository).deleteByUserIdAndChapterId(1L, 1L);
-            verify(skippedProblemRepository).save(any(SkippedProblem.class));
-        }
+        UserProblemState existingState = UserProblemState.builder()
+                .user(testUser)
+                .problem(subjectiveProblem)
+                .lastSubmission(previousSubmission)
+                .lastAnswerStatus(AnswerStatus.WRONG)
+                .solved(false)
+                .attemptCount(1L)
+                .build();
+
+        given(userService.findById(1L)).willReturn(testUser);
+        given(problemService.findById(1L)).willReturn(subjectiveProblem);
+        given(userProblemStateRepository.findByUser_IdAndProblem_Id(1L, 1L)).willReturn(Optional.of(existingState));
+        given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        SubmitRequest request = new SubmitRequest(
+                1L, 1L, ProblemType.SUBJECTIVE,
+                null, "Seoul", null, false
+        );
+
+        submissionService.submit(request);
+
+        ArgumentCaptor<UserProblemState> stateCaptor = ArgumentCaptor.forClass(UserProblemState.class);
+        verify(userProblemStateRepository).save(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().getAttemptCount()).isEqualTo(2L);
+        assertThat(stateCaptor.getValue().getLastAnswerStatus()).isEqualTo(AnswerStatus.CORRECT);
+        assertThat(stateCaptor.getValue().isSolved()).isTrue();
+    }
+
+    @Test
+    @DisplayName("creates chapter skip state when there is no previous state")
+    void shouldCreateSkipStateWithinChapter() {
+        given(userService.findById(1L)).willReturn(testUser);
+        given(problemService.findById(1L)).willReturn(subjectiveProblem);
+        given(chapterService.findById(1L)).willReturn(testChapter);
+        given(userChapterStateRepository.findByUser_IdAndChapter_Id(1L, 1L)).willReturn(Optional.empty());
+
+        submissionService.skipProblem(new SkipRequest(1L, 1L, 1L));
+
+        ArgumentCaptor<UserChapterState> stateCaptor = ArgumentCaptor.forClass(UserChapterState.class);
+        verify(userChapterStateRepository).save(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().getLastSkippedProblem()).isEqualTo(subjectiveProblem);
+    }
+
+    @Test
+    @DisplayName("updates chapter skip state instead of appending rows")
+    void shouldUpdateExistingSkipStateWithinChapter() {
+        UserChapterState existingState = UserChapterState.create(testUser, testChapter, multipleChoiceProblem);
+
+        given(userService.findById(1L)).willReturn(testUser);
+        given(problemService.findById(1L)).willReturn(subjectiveProblem);
+        given(chapterService.findById(1L)).willReturn(testChapter);
+        given(userChapterStateRepository.findByUser_IdAndChapter_Id(1L, 1L)).willReturn(Optional.of(existingState));
+
+        submissionService.skipProblem(new SkipRequest(1L, 1L, 1L));
+
+        ArgumentCaptor<UserChapterState> stateCaptor = ArgumentCaptor.forClass(UserChapterState.class);
+        verify(userChapterStateRepository).save(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().getLastSkippedProblem()).isEqualTo(subjectiveProblem);
+    }
+
+    private void stubMultipleChoiceSubmit() {
+        given(userService.findById(1L)).willReturn(testUser);
+        given(problemService.findById(1L)).willReturn(multipleChoiceProblem);
+        given(userProblemStateRepository.findByUser_IdAndProblem_Id(1L, 1L)).willReturn(Optional.empty());
+        given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    private void stubSubjectiveSubmit() {
+        given(userService.findById(1L)).willReturn(testUser);
+        given(problemService.findById(1L)).willReturn(subjectiveProblem);
+        given(userProblemStateRepository.findByUser_IdAndProblem_Id(1L, 1L)).willReturn(Optional.empty());
+        given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
     }
 }

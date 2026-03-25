@@ -7,6 +7,7 @@ import com.teamsky.learning.problem.entity.Problem;
 import com.teamsky.learning.problem.entity.ProblemType;
 import com.teamsky.learning.submission.entity.AnswerStatus;
 import com.teamsky.learning.submission.entity.Submission;
+import com.teamsky.learning.submission.entity.UserProblemState;
 import com.teamsky.learning.user.entity.User;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import(JpaConfig.class)
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
-@DisplayName("ProblemRepository MySQL 통합 테스트")
+@DisplayName("ProblemRepository MySQL tests")
 class ProblemRepositoryTest {
 
     @Autowired
@@ -38,15 +39,17 @@ class ProblemRepositoryTest {
     private int nextOrderNum = 1;
 
     @Test
-    @DisplayName("랜덤 조회는 풀이한 문제와 마지막으로 넘긴 문제를 제외하고 난이도 필터를 적용한다")
+    @DisplayName("available problem query excludes attempted and last skipped problems")
     void shouldReturnOnlyAvailableProblemIds() {
         User user = persistUser("hong");
-        Chapter chapter = persistChapter("1장");
-        Problem candidate = persistProblem(chapter, "대상 문제", Difficulty.LOW);
-        Problem solved = persistProblem(chapter, "풀이한 문제", Difficulty.LOW);
-        Problem skipped = persistProblem(chapter, "방금 넘긴 문제", Difficulty.LOW);
-        persistProblem(chapter, "다른 난이도 문제", Difficulty.MEDIUM);
-        persistSubmission(user, solved, AnswerStatus.CORRECT);
+        Chapter chapter = persistChapter("Chapter 1");
+        Problem candidate = persistProblem(chapter, "Candidate", Difficulty.LOW);
+        Problem solved = persistProblem(chapter, "Solved", Difficulty.LOW);
+        Problem skipped = persistProblem(chapter, "Skipped", Difficulty.LOW);
+        persistProblem(chapter, "Different difficulty", Difficulty.MEDIUM);
+
+        Submission solvedSubmission = persistSubmission(user, solved, AnswerStatus.CORRECT, "answer");
+        persistUserProblemState(user, solved, solvedSubmission, AnswerStatus.CORRECT, 1L);
         entityManager.flush();
         entityManager.clear();
 
@@ -70,22 +73,29 @@ class ProblemRepositoryTest {
     }
 
     @Test
-    @DisplayName("오답 재풀이 조회는 해당 단원의 오답과 부분정답만 반환한다")
+    @DisplayName("wrong problem query uses only the latest state")
     void shouldReturnWrongProblemIdsWithinChapter() {
         User user = persistUser("kim");
-        Chapter chapter = persistChapter("2장");
-        Chapter otherChapter = persistChapter("3장");
-        Problem wrong = persistProblem(chapter, "오답 문제", Difficulty.LOW);
-        Problem partial = persistProblem(chapter, "부분정답 문제", Difficulty.MEDIUM);
-        Problem correct = persistProblem(chapter, "정답 문제", Difficulty.HIGH);
-        Problem correctedLater = persistProblem(chapter, "나중에 맞힌 문제", Difficulty.LOW);
-        Problem otherChapterWrong = persistProblem(otherChapter, "다른 단원 오답 문제", Difficulty.LOW);
-        persistSubmission(user, wrong, AnswerStatus.WRONG);
-        persistSubmission(user, partial, AnswerStatus.PARTIAL);
-        persistSubmission(user, correct, AnswerStatus.CORRECT);
-        persistSubmission(user, correctedLater, AnswerStatus.WRONG);
-        persistSubmission(user, correctedLater, AnswerStatus.CORRECT);
-        persistSubmission(user, otherChapterWrong, AnswerStatus.WRONG);
+        Chapter chapter = persistChapter("Chapter 2");
+        Chapter otherChapter = persistChapter("Chapter 3");
+        Problem wrong = persistProblem(chapter, "Wrong", Difficulty.LOW);
+        Problem partial = persistProblem(chapter, "Partial", Difficulty.MEDIUM);
+        Problem correct = persistProblem(chapter, "Correct", Difficulty.HIGH);
+        Problem correctedLater = persistProblem(chapter, "Corrected later", Difficulty.LOW);
+        Problem otherChapterWrong = persistProblem(otherChapter, "Other chapter wrong", Difficulty.LOW);
+
+        Submission wrongSubmission = persistSubmission(user, wrong, AnswerStatus.WRONG, "wrong");
+        Submission partialSubmission = persistSubmission(user, partial, AnswerStatus.PARTIAL, "partial");
+        Submission correctSubmission = persistSubmission(user, correct, AnswerStatus.CORRECT, "correct");
+        persistSubmission(user, correctedLater, AnswerStatus.WRONG, "wrong");
+        Submission correctedCorrectSubmission = persistSubmission(user, correctedLater, AnswerStatus.CORRECT, "correct");
+        Submission otherChapterSubmission = persistSubmission(user, otherChapterWrong, AnswerStatus.WRONG, "wrong");
+
+        persistUserProblemState(user, wrong, wrongSubmission, AnswerStatus.WRONG, 1L);
+        persistUserProblemState(user, partial, partialSubmission, AnswerStatus.PARTIAL, 1L);
+        persistUserProblemState(user, correct, correctSubmission, AnswerStatus.CORRECT, 1L);
+        persistUserProblemState(user, correctedLater, correctedCorrectSubmission, AnswerStatus.CORRECT, 2L);
+        persistUserProblemState(user, otherChapterWrong, otherChapterSubmission, AnswerStatus.WRONG, 1L);
         entityManager.flush();
         entityManager.clear();
 
@@ -105,7 +115,7 @@ class ProblemRepositoryTest {
         assertThat(count).isEqualTo(2L);
         assertThat(result)
                 .containsExactlyInAnyOrder(wrong.getId(), partial.getId())
-                .doesNotContain(correctedLater.getId(), correct.getId(), otherChapterWrong.getId());
+                .doesNotContain(correct.getId(), correctedLater.getId(), otherChapterWrong.getId());
     }
 
     private User persistUser(String name) {
@@ -118,7 +128,7 @@ class ProblemRepositoryTest {
     private Chapter persistChapter(String name) {
         return entityManager.persistAndFlush(Chapter.builder()
                 .name(name)
-                .description(name + " 설명")
+                .description(name + " description")
                 .orderNum(nextOrderNum++)
                 .build());
     }
@@ -129,19 +139,31 @@ class ProblemRepositoryTest {
                 .content(content)
                 .problemType(ProblemType.SUBJECTIVE)
                 .difficulty(difficulty)
-                .explanation(content + " 해설")
-                .hint(content + " 힌트")
+                .explanation(content + " explanation")
+                .hint(content + " hint")
                 .build());
     }
 
-    private Submission persistSubmission(User user, Problem problem, AnswerStatus status) {
+    private Submission persistSubmission(User user, Problem problem, AnswerStatus status, String userAnswer) {
         return entityManager.persistAndFlush(Submission.builder()
                 .user(user)
                 .problem(problem)
                 .answerStatus(status)
-                .userAnswer("답안")
+                .userAnswer(userAnswer)
                 .timeSpentSeconds(10L)
                 .hintUsed(false)
+                .build());
+    }
+
+    private UserProblemState persistUserProblemState(User user, Problem problem, Submission lastSubmission,
+                                                     AnswerStatus status, long attemptCount) {
+        return entityManager.persistAndFlush(UserProblemState.builder()
+                .user(user)
+                .problem(problem)
+                .lastSubmission(lastSubmission)
+                .lastAnswerStatus(status)
+                .solved(status == AnswerStatus.CORRECT)
+                .attemptCount(attemptCount)
                 .build());
     }
 }

@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: ${LOCAL_DB_URL:${DB_URL:jdbc:mysql://localhost:3306/learning?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true}}
+    username: ${LOCAL_DB_USERNAME:${DB_USERNAME:root}}
+    password: ${LOCAL_DB_PASSWORD:${DB_PASSWORD:root}}
+
+  jpa:
+    hibernate:
+      ddl-auto: update

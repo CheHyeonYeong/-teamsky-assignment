@@ -4,12 +4,14 @@ import com.teamsky.learning.chapter.ChapterService;
 import com.teamsky.learning.chapter.entity.Chapter;
 import com.teamsky.learning.common.exception.BusinessException;
 import com.teamsky.learning.common.exception.ErrorCode;
-import com.teamsky.learning.problem.entity.*;
+import com.teamsky.learning.problem.entity.Choice;
+import com.teamsky.learning.problem.entity.Difficulty;
+import com.teamsky.learning.problem.entity.Problem;
+import com.teamsky.learning.problem.entity.ProblemType;
 import com.teamsky.learning.problem.request.RandomProblemRequest;
 import com.teamsky.learning.problem.response.ProblemResponse;
 import com.teamsky.learning.stats.StatsService;
-import com.teamsky.learning.submission.SubmissionRepository;
-import com.teamsky.learning.submission.SkippedProblemRepository;
+import com.teamsky.learning.submission.UserChapterStateRepository;
 import com.teamsky.learning.user.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,18 +21,23 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doNothing;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("ProblemService 테스트")
+@DisplayName("ProblemService tests")
 class ProblemServiceTest {
 
     @InjectMocks
@@ -40,10 +47,7 @@ class ProblemServiceTest {
     private ProblemRepository problemRepository;
 
     @Mock
-    private SubmissionRepository submissionRepository;
-
-    @Mock
-    private SkippedProblemRepository skippedProblemRepository;
+    private UserChapterStateRepository userChapterStateRepository;
 
     @Mock
     private UserService userService;
@@ -54,75 +58,70 @@ class ProblemServiceTest {
     @Mock
     private StatsService statsService;
 
-    private Chapter testChapter;
     private Problem testProblem;
 
     @BeforeEach
     void setUp() {
-        testChapter = Chapter.builder()
-                .name("테스트 단원")
-                .description("테스트 단원 설명")
+        Chapter chapter = Chapter.builder()
+                .name("Chapter 1")
+                .description("Basic chapter")
                 .orderNum(1)
                 .build();
+        ReflectionTestUtils.setField(chapter, "id", 1L);
 
         testProblem = Problem.builder()
-                .chapter(testChapter)
-                .content("테스트 문제입니다.")
+                .chapter(chapter)
+                .content("Test problem")
                 .problemType(ProblemType.MULTIPLE_CHOICE)
                 .difficulty(Difficulty.MEDIUM)
-                .explanation("테스트 해설입니다.")
+                .explanation("Explanation")
                 .build();
+        ReflectionTestUtils.setField(testProblem, "id", 1L);
 
         for (int i = 1; i <= 5; i++) {
-            Choice choice = Choice.builder()
+            testProblem.addChoice(Choice.builder()
                     .choiceNumber(i)
-                    .content("선택지 " + i)
-                    .build();
-            testProblem.addChoice(choice);
+                    .content("Choice " + i)
+                    .build());
         }
     }
 
     @Nested
-    @DisplayName("랜덤 문제 조회")
+    @DisplayName("Random problem")
     class GetRandomProblem {
 
         @Test
-        @DisplayName("풀지 않은 문제 중 랜덤으로 1개 반환")
+        @DisplayName("returns one available problem")
         void shouldReturnRandomUnsolvedProblem() {
-            // given
             RandomProblemRequest request = new RandomProblemRequest(1L, 1L, null);
 
             doNothing().when(userService).validateUserExists(1L);
             doNothing().when(chapterService).validateChapterExists(1L);
-            given(skippedProblemRepository.findLastSkippedProblemId(1L, 1L)).willReturn(Optional.empty());
+            given(userChapterStateRepository.findLastSkippedProblemId(1L, 1L)).willReturn(Optional.empty());
             given(problemRepository.countAvailableProblems(1L, 1L, null, null)).willReturn(1L);
             given(problemRepository.findAvailableProblemIds(eq(1L), eq(1L), isNull(), isNull(), any()))
                     .willReturn(List.of(1L));
             given(problemRepository.findById(1L)).willReturn(Optional.of(testProblem));
-            given(statsService.calculateCorrectRate(any())).willReturn(67);
+            given(statsService.calculateCorrectRate(1L)).willReturn(67);
 
-            // when
             ProblemResponse response = problemService.getRandomProblem(request);
 
-            // then
-            assertThat(response).isNotNull();
-            assertThat(response.content()).isEqualTo("테스트 문제입니다.");
+            assertThat(response.problemId()).isEqualTo(1L);
+            assertThat(response.content()).isEqualTo("Test problem");
             assertThat(response.choices()).hasSize(5);
             assertThat(response.answerCorrectRate()).isEqualTo(67);
         }
 
         @Test
-        @DisplayName("더 이상 풀 문제가 없으면 NO_MORE_PROBLEMS 예외")
+        @DisplayName("throws when there are no available problems")
         void shouldThrowExceptionWhenNoMoreProblems() {
-            // given
             RandomProblemRequest request = new RandomProblemRequest(1L, 1L, null);
 
             doNothing().when(userService).validateUserExists(1L);
             doNothing().when(chapterService).validateChapterExists(1L);
-            given(skippedProblemRepository.findLastSkippedProblemId(1L, 1L)).willReturn(Optional.empty());
+            given(userChapterStateRepository.findLastSkippedProblemId(1L, 1L)).willReturn(Optional.empty());
             given(problemRepository.countAvailableProblems(1L, 1L, null, null)).willReturn(0L);
 
-            // when & then
             assertThatThrownBy(() -> problemService.getRandomProblem(request))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
@@ -130,71 +129,66 @@ class ProblemServiceTest {
         }
 
         @Test
-        @DisplayName("직전에 건너뛴 문제는 제외하고 조회")
+        @DisplayName("excludes the last skipped problem in the chapter")
         void shouldExcludeLastSkippedProblem() {
-            // given
             RandomProblemRequest request = new RandomProblemRequest(1L, 1L, null);
 
             doNothing().when(userService).validateUserExists(1L);
             doNothing().when(chapterService).validateChapterExists(1L);
-            given(skippedProblemRepository.findLastSkippedProblemId(1L, 1L)).willReturn(Optional.of(2L));
+            given(userChapterStateRepository.findLastSkippedProblemId(1L, 1L)).willReturn(Optional.of(2L));
             given(problemRepository.countAvailableProblems(1L, 1L, null, 2L)).willReturn(1L);
             given(problemRepository.findAvailableProblemIds(eq(1L), eq(1L), isNull(), eq(2L), any()))
                     .willReturn(List.of(1L));
             given(problemRepository.findById(1L)).willReturn(Optional.of(testProblem));
-            given(statsService.calculateCorrectRate(any())).willReturn(null);
 
-            // when
             ProblemResponse response = problemService.getRandomProblem(request);
 
-            // then
-            assertThat(response).isNotNull();
+            assertThat(response.problemId()).isEqualTo(1L);
         }
     }
 
-    @Nested
-    @DisplayName("난이도별 문제 필터링")
-    class FilterByDifficulty {
+    @Test
+    @DisplayName("filters available problems by difficulty")
+    void shouldReturnProblemWithSpecifiedDifficulty() {
+        Chapter chapter = Chapter.builder()
+                .name("Chapter 1")
+                .description("Basic chapter")
+                .orderNum(1)
+                .build();
 
-        @Test
-        @DisplayName("지정한 난이도의 문제만 조회")
-        void shouldReturnProblemWithSpecifiedDifficulty() {
-            // given
-            Problem hardProblem = Problem.builder()
-                    .chapter(testChapter)
-                    .content("어려운 문제입니다.")
-                    .problemType(ProblemType.MULTIPLE_CHOICE)
-                    .difficulty(Difficulty.HIGH)
-                    .explanation("어려운 문제 해설입니다.")
-                    .build();
+        Problem hardProblem = Problem.builder()
+                .chapter(chapter)
+                .content("Hard problem")
+                .problemType(ProblemType.MULTIPLE_CHOICE)
+                .difficulty(Difficulty.HIGH)
+                .explanation("Explanation")
+                .build();
+        ReflectionTestUtils.setField(chapter, "id", 1L);
+        ReflectionTestUtils.setField(hardProblem, "id", 1L);
 
-            RandomProblemRequest request = new RandomProblemRequest(1L, 1L, Difficulty.HIGH);
+        RandomProblemRequest request = new RandomProblemRequest(1L, 1L, Difficulty.HIGH);
 
-            doNothing().when(userService).validateUserExists(1L);
-            doNothing().when(chapterService).validateChapterExists(1L);
-            given(skippedProblemRepository.findLastSkippedProblemId(1L, 1L)).willReturn(Optional.empty());
-            given(problemRepository.countAvailableProblems(1L, 1L, Difficulty.HIGH, null)).willReturn(1L);
-            given(problemRepository.findAvailableProblemIds(eq(1L), eq(1L), eq(Difficulty.HIGH), isNull(), any()))
-                    .willReturn(List.of(1L));
-            given(problemRepository.findById(1L)).willReturn(Optional.of(hardProblem));
-            given(statsService.calculateCorrectRate(any())).willReturn(45);
+        doNothing().when(userService).validateUserExists(1L);
+        doNothing().when(chapterService).validateChapterExists(1L);
+        given(userChapterStateRepository.findLastSkippedProblemId(1L, 1L)).willReturn(Optional.empty());
+        given(problemRepository.countAvailableProblems(1L, 1L, Difficulty.HIGH, null)).willReturn(1L);
+        given(problemRepository.findAvailableProblemIds(eq(1L), eq(1L), eq(Difficulty.HIGH), isNull(), any()))
+                .willReturn(List.of(1L));
+        given(problemRepository.findById(1L)).willReturn(Optional.of(hardProblem));
+        given(statsService.calculateCorrectRate(1L)).willReturn(45);
 
-            // when
-            ProblemResponse response = problemService.getRandomProblem(request);
+        ProblemResponse response = problemService.getRandomProblem(request);
 
-            // then
-            assertThat(response.difficulty()).isEqualTo(Difficulty.HIGH);
-        }
+        assertThat(response.difficulty()).isEqualTo(Difficulty.HIGH);
     }
 
     @Nested
-    @DisplayName("오답 문제 재풀이")
+    @DisplayName("Wrong problem retry")
     class GetWrongProblems {
 
         @Test
-        @DisplayName("틀린 문제 중 랜덤으로 1개 반환")
+        @DisplayName("returns one current wrong problem")
         void shouldReturnRandomWrongProblem() {
-            // given
             doNothing().when(userService).validateUserExists(1L);
             doNothing().when(chapterService).validateChapterExists(1L);
             given(problemRepository.countWrongProblemIdsByUserIdAndChapterId(eq(1L), eq(1L), anyList()))
@@ -202,25 +196,21 @@ class ProblemServiceTest {
             given(problemRepository.findWrongProblemIdsByUserIdAndChapterId(eq(1L), eq(1L), anyList(), any()))
                     .willReturn(List.of(1L));
             given(problemRepository.findById(anyLong())).willReturn(Optional.of(testProblem));
-            given(statsService.calculateCorrectRate(any())).willReturn(50);
+            given(statsService.calculateCorrectRate(anyLong())).willReturn(50);
 
-            // when
             ProblemResponse response = problemService.getRandomWrongProblem(1L, 1L);
 
-            // then
-            assertThat(response).isNotNull();
+            assertThat(response.problemId()).isEqualTo(1L);
         }
 
         @Test
-        @DisplayName("틀린 문제가 없으면 NO_MORE_PROBLEMS 예외")
+        @DisplayName("throws when there are no current wrong problems")
         void shouldThrowExceptionWhenNoWrongProblems() {
-            // given
             doNothing().when(userService).validateUserExists(1L);
             doNothing().when(chapterService).validateChapterExists(1L);
             given(problemRepository.countWrongProblemIdsByUserIdAndChapterId(eq(1L), eq(1L), anyList()))
                     .willReturn(0L);
 
-            // when & then
             assertThatThrownBy(() -> problemService.getRandomWrongProblem(1L, 1L))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")

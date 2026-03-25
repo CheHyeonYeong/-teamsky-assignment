@@ -61,16 +61,36 @@ CREATE TABLE IF NOT EXISTS submissions (
     INDEX idx_submission_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS skipped_problems (
+CREATE TABLE IF NOT EXISTS user_problem_state (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     problem_id BIGINT NOT NULL,
-    chapter_id BIGINT NOT NULL,
-    skipped_at DATETIME(6) NOT NULL,
+    last_submission_id BIGINT NOT NULL,
+    last_answer_status VARCHAR(20) NOT NULL,
+    solved BOOLEAN NOT NULL DEFAULT FALSE,
+    attempt_count BIGINT NOT NULL DEFAULT 0,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (problem_id) REFERENCES problems(id),
+    FOREIGN KEY (last_submission_id) REFERENCES submissions(id),
+    UNIQUE KEY uk_user_problem_state_user_problem (user_id, problem_id),
+    INDEX idx_user_problem_state_user_problem (user_id, problem_id),
+    INDEX idx_user_problem_state_user_status (user_id, last_answer_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_chapter_state (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    chapter_id BIGINT NOT NULL,
+    last_skipped_problem_id BIGINT NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (chapter_id) REFERENCES chapters(id),
-    INDEX idx_skipped_user_chapter (user_id, chapter_id, skipped_at DESC)
+    FOREIGN KEY (last_skipped_problem_id) REFERENCES problems(id),
+    UNIQUE KEY uk_user_chapter_state_user_chapter (user_id, chapter_id),
+    INDEX idx_user_chapter_state_user_chapter (user_id, chapter_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS bookmarks (

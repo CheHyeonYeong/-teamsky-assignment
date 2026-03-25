@@ -3,6 +3,7 @@ package com.teamsky.learning.problem;
 import com.teamsky.learning.problem.entity.Difficulty;
 import com.teamsky.learning.problem.entity.Problem;
 import com.teamsky.learning.submission.entity.AnswerStatus;
+import com.teamsky.learning.submission.entity.UserProblemState;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -46,9 +47,9 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
             AND (:difficulty IS NULL OR p.difficulty = :difficulty)
             AND (:lastSkippedProblemId IS NULL OR p.id <> :lastSkippedProblemId)
             AND NOT EXISTS (
-                SELECT s.id FROM Submission s
-                WHERE s.user.id = :userId
-                AND s.problem.id = p.id
+                SELECT ups.id FROM UserProblemState ups
+                WHERE ups.user.id = :userId
+                AND ups.problem.id = p.id
             )
             """)
     long countAvailableProblems(
@@ -63,9 +64,9 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
             AND (:difficulty IS NULL OR p.difficulty = :difficulty)
             AND (:lastSkippedProblemId IS NULL OR p.id <> :lastSkippedProblemId)
             AND NOT EXISTS (
-                SELECT s.id FROM Submission s
-                WHERE s.user.id = :userId
-                AND s.problem.id = p.id
+                SELECT ups.id FROM UserProblemState ups
+                WHERE ups.user.id = :userId
+                AND ups.problem.id = p.id
             )
             ORDER BY p.id
             """)
@@ -77,19 +78,11 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
             Pageable pageable);
 
     @Query("""
-            SELECT COUNT(p.id) FROM Problem p
-            WHERE p.chapter.id = :chapterId
-            AND EXISTS (
-                SELECT s.id FROM Submission s
-                WHERE s.user.id = :userId
-                AND s.problem.id = p.id
-                AND s.id = (
-                    SELECT MAX(s2.id) FROM Submission s2
-                    WHERE s2.user.id = :userId
-                    AND s2.problem.id = p.id
-                )
-                AND s.answerStatus IN :statuses
-            )
+            SELECT COUNT(ups.id) FROM UserProblemState ups
+            JOIN ups.problem p
+            WHERE ups.user.id = :userId
+            AND p.chapter.id = :chapterId
+            AND ups.lastAnswerStatus IN :statuses
             """)
     long countWrongProblemIdsByUserIdAndChapterId(
             @Param("userId") Long userId,
@@ -97,19 +90,11 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
             @Param("statuses") List<AnswerStatus> statuses);
 
     @Query("""
-            SELECT p.id FROM Problem p
-            WHERE p.chapter.id = :chapterId
-            AND EXISTS (
-                SELECT s.id FROM Submission s
-                WHERE s.user.id = :userId
-                AND s.problem.id = p.id
-                AND s.id = (
-                    SELECT MAX(s2.id) FROM Submission s2
-                    WHERE s2.user.id = :userId
-                    AND s2.problem.id = p.id
-                )
-                AND s.answerStatus IN :statuses
-            )
+            SELECT p.id FROM UserProblemState ups
+            JOIN ups.problem p
+            WHERE ups.user.id = :userId
+            AND p.chapter.id = :chapterId
+            AND ups.lastAnswerStatus IN :statuses
             ORDER BY p.id
             """)
     List<Long> findWrongProblemIdsByUserIdAndChapterId(

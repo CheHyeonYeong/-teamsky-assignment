@@ -8,7 +8,7 @@ import com.teamsky.learning.problem.entity.Problem;
 import com.teamsky.learning.problem.request.RandomProblemRequest;
 import com.teamsky.learning.problem.response.ProblemResponse;
 import com.teamsky.learning.stats.StatsService;
-import com.teamsky.learning.submission.SkippedProblemRepository;
+import com.teamsky.learning.submission.UserChapterStateRepository;
 import com.teamsky.learning.submission.entity.AnswerStatus;
 import com.teamsky.learning.user.UserService;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +25,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public class ProblemService {
 
     private final ProblemRepository problemRepository;
-    private final SkippedProblemRepository skippedProblemRepository;
+    private final UserChapterStateRepository userChapterStateRepository;
     private final UserService userService;
     private final ChapterService chapterService;
     private final StatsService statsService;
@@ -36,7 +36,7 @@ public class ProblemService {
         userService.validateUserExists(request.userId());
         chapterService.validateChapterExists(request.chapterId());
 
-        Long lastSkippedProblemId = skippedProblemRepository
+        Long lastSkippedProblemId = userChapterStateRepository
                 .findLastSkippedProblemId(request.userId(), request.chapterId())
                 .orElse(null);
 

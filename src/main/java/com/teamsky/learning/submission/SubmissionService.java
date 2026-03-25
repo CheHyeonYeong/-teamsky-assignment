@@ -10,8 +10,9 @@ import com.teamsky.learning.problem.entity.Problem;
 import com.teamsky.learning.problem.entity.ProblemType;
 import com.teamsky.learning.stats.StatsService;
 import com.teamsky.learning.submission.entity.AnswerStatus;
-import com.teamsky.learning.submission.entity.SkippedProblem;
 import com.teamsky.learning.submission.entity.Submission;
+import com.teamsky.learning.submission.entity.UserChapterState;
+import com.teamsky.learning.submission.entity.UserProblemState;
 import com.teamsky.learning.submission.request.SkipRequest;
 import com.teamsky.learning.submission.request.SubmitRequest;
 import com.teamsky.learning.submission.response.SubmissionDetailResponse;
@@ -36,7 +37,8 @@ import java.util.stream.Collectors;
 public class SubmissionService {
 
     private final SubmissionRepository submissionRepository;
-    private final SkippedProblemRepository skippedProblemRepository;
+    private final UserProblemStateRepository userProblemStateRepository;
+    private final UserChapterStateRepository userChapterStateRepository;
     private final UserService userService;
     private final ProblemService problemService;
     private final ChapterService chapterService;
@@ -58,13 +60,14 @@ public class SubmissionService {
                 .hintUsed(request.hintUsed())
                 .build();
 
-        submissionRepository.save(submission);
+        Submission savedSubmission = submissionRepository.save(submission);
+        upsertUserProblemState(user, problem, savedSubmission);
 
         if (!Boolean.TRUE.equals(request.hintUsed())) {
             statsService.updateStats(problem.getId(), status == AnswerStatus.CORRECT);
         }
 
-        return SubmitResponse.of(submission);
+        return SubmitResponse.of(savedSubmission);
     }
 
     @Transactional
@@ -73,15 +76,15 @@ public class SubmissionService {
         Problem problem = problemService.findById(request.problemId());
         Chapter chapter = chapterService.findById(request.chapterId());
 
-        skippedProblemRepository.deleteByUserIdAndChapterId(request.userId(), request.chapterId());
+        UserChapterState userChapterState = userChapterStateRepository
+                .findByUser_IdAndChapter_Id(request.userId(), request.chapterId())
+                .map(existingState -> {
+                    existingState.updateLastSkippedProblem(problem);
+                    return existingState;
+                })
+                .orElseGet(() -> UserChapterState.create(user, chapter, problem));
 
-        SkippedProblem skippedProblem = SkippedProblem.builder()
-                .user(user)
-                .problem(problem)
-                .chapter(chapter)
-                .build();
-
-        skippedProblemRepository.save(skippedProblem);
+        userChapterStateRepository.save(userChapterState);
     }
 
     public SubmissionDetailResponse getSubmissionDetail(Long userId, Long problemId) {
@@ -157,5 +160,17 @@ public class SubmissionService {
         boolean isStrictSubsetOfCorrectAnswers = correctSet.containsAll(userSet);
 
         return isStrictSubsetOfCorrectAnswers ? AnswerStatus.PARTIAL : AnswerStatus.WRONG;
+    }
+
+    private void upsertUserProblemState(User user, Problem problem, Submission submission) {
+        UserProblemState userProblemState = userProblemStateRepository
+                .findByUser_IdAndProblem_Id(user.getId(), problem.getId())
+                .map(existingState -> {
+                    existingState.recordSubmission(submission);
+                    return existingState;
+                })
+                .orElseGet(() -> UserProblemState.create(user, problem, submission));
+
+        userProblemStateRepository.save(userProblemState);
     }
 }
