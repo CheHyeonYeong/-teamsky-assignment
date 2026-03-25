@@ -12,7 +12,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "problems")
+@Table(
+        name = "problems",
+        indexes = {
+                @Index(name = "idx_problem_chapter_id", columnList = "chapter_id, id"),
+                @Index(name = "idx_problem_chapter_difficulty_id", columnList = "chapter_id, difficulty, id")
+        }
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Problem extends BaseTimeEntity {

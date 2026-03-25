@@ -11,83 +11,117 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-def read_problem_request():
-    params = urllib.parse.urlencode(
-        {
-            "userId": random.choice([1, 2, 3]),
-            "chapterId": random.choice([1, 2]),
-        }
-    )
-    return ("GET", f"/api/v1/problems/random?{params}", None, {"Accept": "application/json"})
-
-
-def read_history_request():
-    params = urllib.parse.urlencode(
-        {
-            "userId": random.choice([1, 2, 3]),
-            "chapterId": random.choice([1, 2]),
-            "page": 0,
-            "size": 20,
-        }
-    )
-    return ("GET", f"/api/v1/submissions/history?{params}", None, {"Accept": "application/json"})
-
-
-def read_wrong_request():
-    params = urllib.parse.urlencode(
-        {
-            "userId": random.choice([1, 2, 3]),
-            "page": 0,
-            "size": 20,
-        }
-    )
-    return ("GET", f"/api/v1/submissions/wrong?{params}", None, {"Accept": "application/json"})
-
-
-def read_user_stats_request():
-    user_id = random.choice([1, 2, 3])
-    return ("GET", f"/api/v1/stats/users/{user_id}", None, {"Accept": "application/json"})
-
-
-def write_subjective_request():
-    user_id = random.choice([1, 2, 3])
-    problem_id, answer = random.choice([(2, "20"), (2, "999"), (4, "2"), (4, "777")])
-    payload = {
-        "problemId": problem_id,
-        "userId": user_id,
-        "answerType": "SUBJECTIVE",
-        "subjectiveAnswer": answer,
-        "timeSpentSeconds": random.randint(3, 30),
-        "hintUsed": False,
-    }
-    return (
-        "POST",
-        "/api/v1/submissions",
-        json.dumps(payload).encode("utf-8"),
-        {"Content-Type": "application/json", "Accept": "application/json"},
-    )
-
-
-def mixed_request():
-    return random.choice(
-        [
-            read_problem_request,
-            read_history_request,
-            read_wrong_request,
-            read_user_stats_request,
-            write_subjective_request,
-        ]
-    )()
-
-
-SCENARIOS = {
-    "read-problem": read_problem_request,
-    "read-history": read_history_request,
-    "read-wrong": read_wrong_request,
-    "read-user-stats": read_user_stats_request,
-    "write-subjective": write_subjective_request,
-    "mixed": mixed_request,
+NARROW_PROFILE = {
+    "name": "narrow",
+    "user_ids": [1, 2, 3],
+    "chapter_ids": [1, 2],
+    "subjective_cases": [
+        {"problem_id": 2, "correct_answers": ["20"], "wrong_answers": ["999", "777"]},
+        {"problem_id": 4, "correct_answers": ["2"], "wrong_answers": ["999", "777"]},
+    ],
 }
+
+WIDE_PROFILE = {
+    "name": "wide",
+    "user_ids": list(range(1001, 1121)),
+    "chapter_ids": [901, 902],
+    "subjective_cases": [
+        {
+            "problem_id": problem_id,
+            "correct_answers": [f"answer-{problem_id}"],
+            "wrong_answers": [f"wrong-{problem_id}", f"invalid-{problem_id}"],
+        }
+        for problem_id in range(2001, 2041)
+    ],
+}
+
+PROFILES = {
+    "narrow": NARROW_PROFILE,
+    "wide": WIDE_PROFILE,
+}
+
+
+def build_request_factories(profile):
+    user_ids = profile["user_ids"]
+    chapter_ids = profile["chapter_ids"]
+    subjective_cases = profile["subjective_cases"]
+
+    def read_problem_request():
+        params = urllib.parse.urlencode(
+            {
+                "userId": random.choice(user_ids),
+                "chapterId": random.choice(chapter_ids),
+            }
+        )
+        return ("GET", f"/api/v1/problems/random?{params}", None, {"Accept": "application/json"})
+
+    def read_history_request():
+        params = urllib.parse.urlencode(
+            {
+                "userId": random.choice(user_ids),
+                "chapterId": random.choice(chapter_ids),
+                "page": 0,
+                "size": 20,
+            }
+        )
+        return ("GET", f"/api/v1/submissions/history?{params}", None, {"Accept": "application/json"})
+
+    def read_wrong_request():
+        params = urllib.parse.urlencode(
+            {
+                "userId": random.choice(user_ids),
+                "page": 0,
+                "size": 20,
+            }
+        )
+        return ("GET", f"/api/v1/submissions/wrong?{params}", None, {"Accept": "application/json"})
+
+    def read_user_stats_request():
+        user_id = random.choice(user_ids)
+        return ("GET", f"/api/v1/stats/users/{user_id}", None, {"Accept": "application/json"})
+
+    def write_subjective_request():
+        user_id = random.choice(user_ids)
+        case = random.choice(subjective_cases)
+        if random.random() < 0.5:
+            answer = random.choice(case["correct_answers"])
+        else:
+            answer = random.choice(case["wrong_answers"])
+
+        payload = {
+            "problemId": case["problem_id"],
+            "userId": user_id,
+            "answerType": "SUBJECTIVE",
+            "subjectiveAnswer": answer,
+            "timeSpentSeconds": random.randint(3, 30),
+            "hintUsed": False,
+        }
+        return (
+            "POST",
+            "/api/v1/submissions",
+            json.dumps(payload).encode("utf-8"),
+            {"Content-Type": "application/json", "Accept": "application/json"},
+        )
+
+    def mixed_request():
+        return random.choice(
+            [
+                read_problem_request,
+                read_history_request,
+                read_wrong_request,
+                read_user_stats_request,
+                write_subjective_request,
+            ]
+        )()
+
+    return {
+        "read-problem": read_problem_request,
+        "read-history": read_history_request,
+        "read-wrong": read_wrong_request,
+        "read-user-stats": read_user_stats_request,
+        "write-subjective": write_subjective_request,
+        "mixed": mixed_request,
+    }
 
 
 def percentile(samples, p):
@@ -141,14 +175,20 @@ def make_request(base_url, request_factory, timeout):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scenario", choices=sorted(SCENARIOS), required=True)
+    parser.add_argument("--scenario", required=True)
+    parser.add_argument("--profile", choices=sorted(PROFILES), default="narrow")
     parser.add_argument("--base-url", default="http://localhost:8080")
     parser.add_argument("--requests", type=int, default=500)
     parser.add_argument("--concurrency", type=int, default=20)
     parser.add_argument("--timeout", type=float, default=10.0)
     args = parser.parse_args()
 
-    request_factory = SCENARIOS[args.scenario]
+    profile = PROFILES[args.profile]
+    scenarios = build_request_factories(profile)
+    if args.scenario not in scenarios:
+        raise SystemExit(f"Unknown scenario: {args.scenario}")
+
+    request_factory = scenarios[args.scenario]
     base_url = args.base_url.rstrip("/")
     latencies = []
     status_counts = Counter()
@@ -181,6 +221,12 @@ def main():
     duration = time.perf_counter() - started
     report = {
         "scenario": args.scenario,
+        "profile": profile["name"],
+        "pool": {
+            "users": len(profile["user_ids"]),
+            "chapters": len(profile["chapter_ids"]),
+            "subjective_problems": len(profile["subjective_cases"]),
+        },
         "base_url": base_url,
         "requests": args.requests,
         "concurrency": args.concurrency,
@@ -194,6 +240,7 @@ def main():
             "median": round(statistics.median(latencies), 2) if latencies else 0.0,
             "p95": round(percentile(latencies, 95), 2),
             "p99": round(percentile(latencies, 99), 2),
+            "p999": round(percentile(latencies, 99.9), 2),
             "max": round(max(latencies), 2) if latencies else 0.0,
         },
         "error_samples": errors,

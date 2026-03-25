@@ -10,6 +10,7 @@ import com.teamsky.learning.problem.entity.ProblemType;
 import com.teamsky.learning.stats.StatsService;
 import com.teamsky.learning.submission.entity.AnswerStatus;
 import com.teamsky.learning.submission.entity.Submission;
+import com.teamsky.learning.submission.event.SubmissionStatsUpdateRequestedEvent;
 import com.teamsky.learning.submission.SubmissionRepository;
 import com.teamsky.learning.submission.UserChapterStateRepository;
 import com.teamsky.learning.submission.UserProblemStateRepository;
@@ -21,6 +22,7 @@ import com.teamsky.learning.submission.response.SubmitResponse;
 import com.teamsky.learning.user.UserService;
 import com.teamsky.learning.user.entity.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -43,6 +45,7 @@ public class SubmissionService {
     private final ProblemService problemService;
     private final ChapterService chapterService;
     private final StatsService statsService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional
     public SubmitResponse submit(SubmitRequest request) {
@@ -70,8 +73,13 @@ public class SubmissionService {
         );
         boolean isFirstProblemAttempt = updatedRows == 1;
 
-        statsService.updateSubmissionStats(user.getId(), problem.getChapter().getId(), status == AnswerStatus.CORRECT);
-        statsService.updateProblemStats(problem.getId(), status == AnswerStatus.CORRECT, isFirstProblemAttempt);
+        applicationEventPublisher.publishEvent(new SubmissionStatsUpdateRequestedEvent(
+                user.getId(),
+                problem.getChapter().getId(),
+                problem.getId(),
+                status == AnswerStatus.CORRECT,
+                isFirstProblemAttempt
+        ));
 
         return SubmitResponse.of(savedSubmission);
     }

@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS problems (
     hint TEXT,
     created_at DATETIME(6) NOT NULL,
     updated_at DATETIME(6) NOT NULL,
-    FOREIGN KEY (chapter_id) REFERENCES chapters(id)
+    FOREIGN KEY (chapter_id) REFERENCES chapters(id),
+    INDEX idx_problem_chapter_id (chapter_id, id),
+    INDEX idx_problem_chapter_difficulty_id (chapter_id, difficulty, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS choices (

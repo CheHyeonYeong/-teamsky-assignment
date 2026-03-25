@@ -13,6 +13,7 @@ import com.teamsky.learning.problem.entity.ProblemType;
 import com.teamsky.learning.stats.StatsService;
 import com.teamsky.learning.submission.entity.AnswerStatus;
 import com.teamsky.learning.submission.entity.Submission;
+import com.teamsky.learning.submission.event.SubmissionStatsUpdateRequestedEvent;
 import com.teamsky.learning.submission.SubmissionRepository;
 import com.teamsky.learning.submission.UserChapterStateRepository;
 import com.teamsky.learning.submission.UserProblemStateRepository;
@@ -30,6 +31,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
@@ -91,6 +93,9 @@ class SubmissionServiceTest {
 
     @Mock
     private StatsService statsService;
+
+    @Mock
+    private ApplicationEventPublisher applicationEventPublisher;
 
     private User testUser;
     private Chapter testChapter;
@@ -278,8 +283,12 @@ class SubmissionServiceTest {
 
         verify(userProblemStateRepository).upsertSubmissionState(
                 TEST_USER_ID, TEST_PROBLEM_ID, PERSISTED_SUBMISSION_ID, "CORRECT", true);
-        verify(statsService).updateSubmissionStats(TEST_USER_ID, TEST_CHAPTER_ID, true);
-        verify(statsService).updateProblemStats(TEST_PROBLEM_ID, true, true);
+        ArgumentCaptor<SubmissionStatsUpdateRequestedEvent> eventCaptor =
+                ArgumentCaptor.forClass(SubmissionStatsUpdateRequestedEvent.class);
+        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).isEqualTo(new SubmissionStatsUpdateRequestedEvent(
+                TEST_USER_ID, TEST_CHAPTER_ID, TEST_PROBLEM_ID, true, true
+        ));
     }
 
     @Test
@@ -297,8 +306,12 @@ class SubmissionServiceTest {
 
         verify(userProblemStateRepository).upsertSubmissionState(
                 TEST_USER_ID, TEST_PROBLEM_ID, PERSISTED_SUBMISSION_ID, "WRONG", false);
-        verify(statsService).updateSubmissionStats(TEST_USER_ID, TEST_CHAPTER_ID, false);
-        verify(statsService).updateProblemStats(TEST_PROBLEM_ID, false, true);
+        ArgumentCaptor<SubmissionStatsUpdateRequestedEvent> eventCaptor =
+                ArgumentCaptor.forClass(SubmissionStatsUpdateRequestedEvent.class);
+        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).isEqualTo(new SubmissionStatsUpdateRequestedEvent(
+                TEST_USER_ID, TEST_CHAPTER_ID, TEST_PROBLEM_ID, false, true
+        ));
     }
 
     @Test
@@ -314,7 +327,12 @@ class SubmissionServiceTest {
 
         submissionService.submit(request);
 
-        verify(statsService).updateProblemStats(TEST_PROBLEM_ID, true, false);
+        ArgumentCaptor<SubmissionStatsUpdateRequestedEvent> eventCaptor =
+                ArgumentCaptor.forClass(SubmissionStatsUpdateRequestedEvent.class);
+        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).isEqualTo(new SubmissionStatsUpdateRequestedEvent(
+                TEST_USER_ID, TEST_CHAPTER_ID, TEST_PROBLEM_ID, true, false
+        ));
     }
 
     @Test
