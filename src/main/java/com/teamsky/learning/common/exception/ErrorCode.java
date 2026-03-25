@@ -20,7 +20,7 @@ public enum ErrorCode {
 
     // Problem
     PROBLEM_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "Problem not found"),
-    NO_MORE_PROBLEMS(HttpStatus.OK, "P002", "No more problems available in this chapter"),
+    NO_MORE_PROBLEMS(HttpStatus.NOT_FOUND, "P002", "No more problems available in this chapter"),
 
     // Submission
     SUBMISSION_NOT_FOUND(HttpStatus.NOT_FOUND, "S001", "Submission not found"),

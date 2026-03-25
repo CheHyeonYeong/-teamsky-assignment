@@ -1,5 +1,6 @@
 package com.teamsky.learning.submission;
 
+import com.teamsky.learning.common.response.PageResponse;
 import com.teamsky.learning.submission.request.SkipRequest;
 import com.teamsky.learning.submission.request.SubmitRequest;
 import com.teamsky.learning.submission.response.SubmissionDetailResponse;
@@ -9,7 +10,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
@@ -48,20 +48,18 @@ public class SubmissionController {
 
     @Operation(summary = "풀이 이력 목록", description = "단원별 풀이 이력을 페이징하여 조회합니다.")
     @GetMapping("/history")
-    public ResponseEntity<Page<SubmissionHistoryResponse>> getHistory(
+    public ResponseEntity<PageResponse<SubmissionHistoryResponse>> getHistory(
             @RequestParam Long userId,
             @RequestParam Long chapterId,
             @PageableDefault(size = 20) Pageable pageable) {
-        Page<SubmissionHistoryResponse> response = submissionService.getSubmissionHistory(userId, chapterId, pageable);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(PageResponse.of(submissionService.getSubmissionHistory(userId, chapterId, pageable)));
     }
 
     @Operation(summary = "오답 노트", description = "틀린 문제 목록을 조회합니다.")
     @GetMapping("/wrong")
-    public ResponseEntity<Page<SubmissionHistoryResponse>> getWrongSubmissions(
+    public ResponseEntity<PageResponse<SubmissionHistoryResponse>> getWrongSubmissions(
             @RequestParam Long userId,
             @PageableDefault(size = 20) Pageable pageable) {
-        Page<SubmissionHistoryResponse> response = submissionService.getWrongSubmissions(userId, pageable);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(PageResponse.of(submissionService.getWrongSubmissions(userId, pageable)));
     }
 }
