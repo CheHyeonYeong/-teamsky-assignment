@@ -12,6 +12,7 @@ import com.teamsky.learning.problem.entity.Problem;
 import com.teamsky.learning.problem.entity.ProblemType;
 import com.teamsky.learning.user.UserService;
 import com.teamsky.learning.user.entity.User;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -83,8 +84,7 @@ class BookmarkServiceTest {
 
             given(userService.findById(1L)).willReturn(testUser);
             given(problemService.findById(1L)).willReturn(testProblem);
-            given(bookmarkRepository.existsByUserIdAndProblemId(1L, 1L)).willReturn(false);
-            given(bookmarkRepository.save(any(Bookmark.class))).willAnswer(invocation -> invocation.getArgument(0));
+            given(bookmarkRepository.saveAndFlush(any(Bookmark.class))).willAnswer(invocation -> invocation.getArgument(0));
 
             // when
             BookmarkResponse response = bookmarkService.addBookmark(request);
@@ -101,7 +101,8 @@ class BookmarkServiceTest {
 
             given(userService.findById(1L)).willReturn(testUser);
             given(problemService.findById(1L)).willReturn(testProblem);
-            given(bookmarkRepository.existsByUserIdAndProblemId(1L, 1L)).willReturn(true);
+            given(bookmarkRepository.saveAndFlush(any(Bookmark.class)))
+                    .willThrow(new DataIntegrityViolationException("duplicate"));
 
             // when & then
             assertThatThrownBy(() -> bookmarkService.addBookmark(request))

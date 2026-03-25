@@ -27,16 +27,13 @@ public class StatsService {
 
     @Transactional
     public void updateStats(Long problemId, boolean isCorrect) {
-        ProblemStats stats = problemStatsRepository.findByProblemId(problemId)
-                .orElse(null);
-
-        if (stats == null) {
+        int updatedRows = problemStatsRepository.incrementTotalCount(problemId);
+        if (updatedRows == 0) {
             return;
         }
 
-        stats.incrementTotal();
         if (isCorrect) {
-            stats.incrementCorrect();
+            problemStatsRepository.incrementCorrectCount(problemId);
         }
     }
 

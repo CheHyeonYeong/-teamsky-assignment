@@ -10,6 +10,7 @@ import com.teamsky.learning.problem.entity.Problem;
 import com.teamsky.learning.user.UserService;
 import com.teamsky.learning.user.entity.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -28,17 +29,16 @@ public class BookmarkService {
     public BookmarkResponse addBookmark(BookmarkRequest request) {
         User user = userService.findById(request.userId());
         Problem problem = problemService.findById(request.problemId());
-
-        if (bookmarkRepository.existsByUserIdAndProblemId(request.userId(), request.problemId())) {
-            throw new BusinessException(ErrorCode.BOOKMARK_ALREADY_EXISTS);
-        }
-
         Bookmark bookmark = Bookmark.builder()
                 .user(user)
                 .problem(problem)
                 .build();
 
-        bookmarkRepository.save(bookmark);
+        try {
+            bookmarkRepository.saveAndFlush(bookmark);
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.BOOKMARK_ALREADY_EXISTS);
+        }
 
         return BookmarkResponse.of(bookmark);
     }

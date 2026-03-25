@@ -94,9 +94,10 @@ class ProblemServiceTest {
 
             doNothing().when(userService).validateUserExists(1L);
             doNothing().when(chapterService).validateChapterExists(1L);
-            given(submissionRepository.findProblemIdsByUserId(1L)).willReturn(List.of());
             given(skippedProblemRepository.findLastSkippedProblemId(1L, 1L)).willReturn(Optional.empty());
-            given(problemRepository.findByChapterIdExcluding(eq(1L), anyList())).willReturn(List.of(testProblem));
+            given(problemRepository.findRandomAvailableProblemIds(eq(1L), eq(1L), isNull(), isNull(), any()))
+                    .willReturn(List.of(1L));
+            given(problemRepository.findById(1L)).willReturn(Optional.of(testProblem));
             given(statsService.calculateCorrectRate(any())).willReturn(67);
 
             // when
@@ -117,9 +118,9 @@ class ProblemServiceTest {
 
             doNothing().when(userService).validateUserExists(1L);
             doNothing().when(chapterService).validateChapterExists(1L);
-            given(submissionRepository.findProblemIdsByUserId(1L)).willReturn(List.of(1L, 2L, 3L));
             given(skippedProblemRepository.findLastSkippedProblemId(1L, 1L)).willReturn(Optional.empty());
-            given(problemRepository.findByChapterIdExcluding(eq(1L), anyList())).willReturn(List.of());
+            given(problemRepository.findRandomAvailableProblemIds(eq(1L), eq(1L), isNull(), isNull(), any()))
+                    .willReturn(List.of());
 
             // when & then
             assertThatThrownBy(() -> problemService.getRandomProblem(request))
@@ -136,9 +137,10 @@ class ProblemServiceTest {
 
             doNothing().when(userService).validateUserExists(1L);
             doNothing().when(chapterService).validateChapterExists(1L);
-            given(submissionRepository.findProblemIdsByUserId(1L)).willReturn(List.of(1L));
             given(skippedProblemRepository.findLastSkippedProblemId(1L, 1L)).willReturn(Optional.of(2L));
-            given(problemRepository.findByChapterIdExcluding(eq(1L), eq(List.of(1L, 2L)))).willReturn(List.of(testProblem));
+            given(problemRepository.findRandomAvailableProblemIds(eq(1L), eq(1L), isNull(), eq(2L), any()))
+                    .willReturn(List.of(1L));
+            given(problemRepository.findById(1L)).willReturn(Optional.of(testProblem));
             given(statsService.calculateCorrectRate(any())).willReturn(null);
 
             // when
@@ -169,10 +171,10 @@ class ProblemServiceTest {
 
             doNothing().when(userService).validateUserExists(1L);
             doNothing().when(chapterService).validateChapterExists(1L);
-            given(submissionRepository.findProblemIdsByUserId(1L)).willReturn(List.of());
             given(skippedProblemRepository.findLastSkippedProblemId(1L, 1L)).willReturn(Optional.empty());
-            given(problemRepository.findByChapterIdAndDifficultyExcluding(eq(1L), eq(Difficulty.HIGH), anyList()))
-                    .willReturn(List.of(hardProblem));
+            given(problemRepository.findRandomAvailableProblemIds(eq(1L), eq(1L), eq(Difficulty.HIGH), isNull(), any()))
+                    .willReturn(List.of(1L));
+            given(problemRepository.findById(1L)).willReturn(Optional.of(hardProblem));
             given(statsService.calculateCorrectRate(any())).willReturn(45);
 
             // when
@@ -193,8 +195,8 @@ class ProblemServiceTest {
             // given
             doNothing().when(userService).validateUserExists(1L);
             doNothing().when(chapterService).validateChapterExists(1L);
-            given(submissionRepository.findWrongProblemIdsByUserIdAndChapterId(1L, 1L))
-                    .willReturn(List.of(1L, 2L));
+            given(problemRepository.findRandomWrongProblemIdsByUserIdAndChapterId(eq(1L), eq(1L), anyList(), any()))
+                    .willReturn(List.of(1L));
             given(problemRepository.findById(anyLong())).willReturn(Optional.of(testProblem));
             given(statsService.calculateCorrectRate(any())).willReturn(50);
 
@@ -211,7 +213,7 @@ class ProblemServiceTest {
             // given
             doNothing().when(userService).validateUserExists(1L);
             doNothing().when(chapterService).validateChapterExists(1L);
-            given(submissionRepository.findWrongProblemIdsByUserIdAndChapterId(1L, 1L))
+            given(problemRepository.findRandomWrongProblemIdsByUserIdAndChapterId(eq(1L), eq(1L), anyList(), any()))
                     .willReturn(List.of());
 
             // when & then
