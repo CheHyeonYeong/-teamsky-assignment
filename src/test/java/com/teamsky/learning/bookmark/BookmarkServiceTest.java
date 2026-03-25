@@ -12,7 +12,6 @@ import com.teamsky.learning.problem.entity.Problem;
 import com.teamsky.learning.problem.entity.ProblemType;
 import com.teamsky.learning.user.UserService;
 import com.teamsky.learning.user.entity.User;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -26,8 +25,8 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -81,10 +80,15 @@ class BookmarkServiceTest {
         void shouldAddBookmarkSuccessfully() {
             // given
             BookmarkRequest request = new BookmarkRequest(1L, 1L);
+            Bookmark bookmark = Bookmark.builder()
+                    .user(testUser)
+                    .problem(testProblem)
+                    .build();
 
-            given(userService.findById(1L)).willReturn(testUser);
+            doNothing().when(userService).validateUserExists(1L);
             given(problemService.findById(1L)).willReturn(testProblem);
-            given(bookmarkRepository.saveAndFlush(any(Bookmark.class))).willAnswer(invocation -> invocation.getArgument(0));
+            given(bookmarkRepository.insertIgnore(1L, 1L)).willReturn(1);
+            given(bookmarkRepository.findByUserIdAndProblemIdWithProblem(1L, 1L)).willReturn(Optional.of(bookmark));
 
             // when
             BookmarkResponse response = bookmarkService.addBookmark(request);
@@ -99,10 +103,9 @@ class BookmarkServiceTest {
             // given
             BookmarkRequest request = new BookmarkRequest(1L, 1L);
 
-            given(userService.findById(1L)).willReturn(testUser);
+            doNothing().when(userService).validateUserExists(1L);
             given(problemService.findById(1L)).willReturn(testProblem);
-            given(bookmarkRepository.saveAndFlush(any(Bookmark.class)))
-                    .willThrow(new DataIntegrityViolationException("duplicate"));
+            given(bookmarkRepository.insertIgnore(1L, 1L)).willReturn(0);
 
             // when & then
             assertThatThrownBy(() -> bookmarkService.addBookmark(request))

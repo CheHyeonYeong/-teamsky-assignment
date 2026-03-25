@@ -6,11 +6,8 @@ import com.teamsky.learning.bookmark.response.BookmarkResponse;
 import com.teamsky.learning.common.exception.BusinessException;
 import com.teamsky.learning.common.exception.ErrorCode;
 import com.teamsky.learning.problem.ProblemService;
-import com.teamsky.learning.problem.entity.Problem;
 import com.teamsky.learning.user.UserService;
-import com.teamsky.learning.user.entity.User;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -27,18 +24,16 @@ public class BookmarkService {
 
     @Transactional
     public BookmarkResponse addBookmark(BookmarkRequest request) {
-        User user = userService.findById(request.userId());
-        Problem problem = problemService.findById(request.problemId());
-        Bookmark bookmark = Bookmark.builder()
-                .user(user)
-                .problem(problem)
-                .build();
+        userService.validateUserExists(request.userId());
+        problemService.findById(request.problemId());
 
-        try {
-            bookmarkRepository.saveAndFlush(bookmark);
-        } catch (DataIntegrityViolationException e) {
+        int insertedRows = bookmarkRepository.insertIgnore(request.userId(), request.problemId());
+        if (insertedRows == 0) {
             throw new BusinessException(ErrorCode.BOOKMARK_ALREADY_EXISTS);
         }
+
+        Bookmark bookmark = bookmarkRepository.findByUserIdAndProblemIdWithProblem(request.userId(), request.problemId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.BOOKMARK_NOT_FOUND));
 
         return BookmarkResponse.of(bookmark);
     }

@@ -14,8 +14,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
-        log.error("BusinessException: {}", e.getMessage());
         ErrorCode errorCode = e.getErrorCode();
+        if (errorCode.getStatus().is5xxServerError()) {
+            log.error("BusinessException [{}]: {}", errorCode.getCode(), e.getMessage());
+        } else if (errorCode.getStatus().is4xxClientError()) {
+            log.warn("BusinessException [{}]: {}", errorCode.getCode(), e.getMessage());
+        } else {
+            log.info("BusinessException [{}]: {}", errorCode.getCode(), e.getMessage());
+        }
         return ResponseEntity
                 .status(errorCode.getStatus())
                 .body(ErrorResponse.of(errorCode));
@@ -23,7 +29,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleMethodArgumentNotValidException(MethodArgumentNotValidException e) {
-        log.error("MethodArgumentNotValidException: {}", e.getMessage());
+        log.warn("MethodArgumentNotValidException: {}", e.getMessage());
         return ResponseEntity
                 .badRequest()
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE, e.getBindingResult()));
@@ -31,7 +37,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BindException.class)
     public ResponseEntity<ErrorResponse> handleBindException(BindException e) {
-        log.error("BindException: {}", e.getMessage());
+        log.warn("BindException: {}", e.getMessage());
         return ResponseEntity
                 .badRequest()
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE, e.getBindingResult()));

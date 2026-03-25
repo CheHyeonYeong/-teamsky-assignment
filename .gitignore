@@ -42,6 +42,7 @@ out/
 ### Logs ###
 *.log
 logs/
+.tmp/
 
 ### Environment ###
 .env
