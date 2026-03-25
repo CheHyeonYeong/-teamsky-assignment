@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS submissions (
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (problem_id) REFERENCES problems(id),
     INDEX idx_submission_user_problem (user_id, problem_id),
-    INDEX idx_submission_user (user_id)
+    INDEX idx_submission_user_created (user_id, created_at),
+    INDEX idx_submission_user_status_created (user_id, answer_status, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS user_problem_state (
@@ -110,6 +111,31 @@ CREATE TABLE IF NOT EXISTS problem_stats (
     total_count BIGINT NOT NULL DEFAULT 0,
     correct_count BIGINT NOT NULL DEFAULT 0,
     FOREIGN KEY (problem_id) REFERENCES problems(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_submission_stats (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    total_submissions BIGINT NOT NULL DEFAULT 0,
+    correct_submissions BIGINT NOT NULL DEFAULT 0,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    UNIQUE KEY uk_user_submission_stats_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_chapter_submission_stats (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    chapter_id BIGINT NOT NULL,
+    total_submissions BIGINT NOT NULL DEFAULT 0,
+    correct_submissions BIGINT NOT NULL DEFAULT 0,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (chapter_id) REFERENCES chapters(id),
+    UNIQUE KEY uk_user_chapter_submission_stats_user_chapter (user_id, chapter_id),
+    INDEX idx_user_chapter_submission_stats_user_chapter (user_id, chapter_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Sample Data for Testing

@@ -13,6 +13,15 @@ import java.util.List;
 
 public interface ProblemRepository extends JpaRepository<Problem, Long> {
 
+    java.util.Optional<Problem> findByIdAndChapter_Id(Long problemId, Long chapterId);
+
+    @Query("""
+            SELECT DISTINCT p FROM Problem p
+            LEFT JOIN FETCH p.answers
+            WHERE p.id = :problemId
+            """)
+    java.util.Optional<Problem> findByIdWithAnswers(@Param("problemId") Long problemId);
+
     @Query("SELECT p FROM Problem p WHERE p.chapter.id = :chapterId")
     List<Problem> findByChapterId(@Param("chapterId") Long chapterId);
 

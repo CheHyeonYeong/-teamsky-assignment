@@ -36,6 +36,19 @@ Test profile database variables:
 - `TEST_DB_USERNAME`
 - `TEST_DB_PASSWORD`
 
+## Existing database migration
+
+If you already have a MySQL database from an older schema version, run the
+rerunnable migration before starting the default profile. It creates the new
+state/aggregate tables and backfills them from `submissions`.
+
+```powershell
+mysql --host localhost --port 3306 --user root --password=root learning < scripts/migrations/20260325_backfill_state_and_stats.sql
+```
+
+The migration also imports the latest per-chapter skip state from
+`skipped_problems` when that legacy table exists.
+
 ## Load test
 
 Start the app first, then run:

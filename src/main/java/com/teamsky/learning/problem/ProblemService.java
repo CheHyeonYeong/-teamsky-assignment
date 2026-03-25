@@ -95,6 +95,16 @@ public class ProblemService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROBLEM_NOT_FOUND));
     }
 
+    public Problem findByIdInChapter(Long problemId, Long chapterId) {
+        return problemRepository.findByIdAndChapter_Id(problemId, chapterId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROBLEM_NOT_FOUND));
+    }
+
+    public Problem findByIdWithAnswers(Long problemId) {
+        return problemRepository.findByIdWithAnswers(problemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROBLEM_NOT_FOUND));
+    }
+
     private Long selectRandomProblemId(long totalCount, java.util.function.IntFunction<List<Long>> pageFetcher) {
         if (totalCount == 0) {
             throw new BusinessException(ErrorCode.NO_MORE_PROBLEMS);

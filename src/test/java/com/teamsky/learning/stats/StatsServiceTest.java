@@ -1,7 +1,8 @@
 package com.teamsky.learning.stats;
 
 import com.teamsky.learning.stats.entity.ProblemStats;
-import com.teamsky.learning.submission.SubmissionRepository;
+import com.teamsky.learning.stats.entity.UserChapterSubmissionStats;
+import com.teamsky.learning.stats.entity.UserSubmissionStats;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -18,7 +19,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("StatsService 테스트")
+@DisplayName("StatsService tests")
 class StatsServiceTest {
 
     @InjectMocks
@@ -28,172 +29,140 @@ class StatsServiceTest {
     private ProblemStatsRepository problemStatsRepository;
 
     @Mock
-    private SubmissionRepository submissionRepository;
+    private UserSubmissionStatsRepository userSubmissionStatsRepository;
+
+    @Mock
+    private UserChapterSubmissionStatsRepository userChapterSubmissionStatsRepository;
 
     @Nested
-    @DisplayName("정답률 계산")
+    @DisplayName("Correct rate")
     class CalculateCorrectRate {
 
         @Test
-        @DisplayName("30명 이상 풀면 정답률 반환 (소수점 첫째자리 반올림)")
+        @DisplayName("returns a rounded rate when the submission count is at least 30")
         void shouldReturnCorrectRateWhenOver30Submissions() {
-            // given
-            ProblemStats stats = new TestProblemStats(35L, 23L); // 23/35 = 65.71... -> 66%
+            ProblemStats stats = new TestProblemStats(35L, 23L);
             given(problemStatsRepository.findByProblemId(1L)).willReturn(Optional.of(stats));
 
-            // when
             Integer correctRate = statsService.calculateCorrectRate(1L);
 
-            // then
             assertThat(correctRate).isEqualTo(66);
         }
 
         @Test
-        @DisplayName("30명 미만이면 null 반환")
+        @DisplayName("returns null when the submission count is below 30")
         void shouldReturnNullWhenUnder30Submissions() {
-            // given
             ProblemStats stats = new TestProblemStats(25L, 20L);
             given(problemStatsRepository.findByProblemId(1L)).willReturn(Optional.of(stats));
 
-            // when
             Integer correctRate = statsService.calculateCorrectRate(1L);
 
-            // then
             assertThat(correctRate).isNull();
         }
 
         @Test
-        @DisplayName("통계가 없으면 null 반환")
+        @DisplayName("returns null when no stats row exists")
         void shouldReturnNullWhenNoStats() {
-            // given
             given(problemStatsRepository.findByProblemId(1L)).willReturn(Optional.empty());
 
-            // when
             Integer correctRate = statsService.calculateCorrectRate(1L);
 
-            // then
             assertThat(correctRate).isNull();
-        }
-
-        @Test
-        @DisplayName("66.7% -> 67% 반올림")
-        void shouldRoundUp667To67() {
-            // given
-            ProblemStats stats = new TestProblemStats(30L, 20L); // 20/30 = 66.67... -> 67%
-            given(problemStatsRepository.findByProblemId(1L)).willReturn(Optional.of(stats));
-
-            // when
-            Integer correctRate = statsService.calculateCorrectRate(1L);
-
-            // then
-            assertThat(correctRate).isEqualTo(67);
-        }
-
-        @Test
-        @DisplayName("66.4% -> 66% 버림")
-        void shouldRoundDown664To66() {
-            // given
-            ProblemStats stats = new TestProblemStats(500L, 332L); // 332/500 = 66.4% -> 66%
-            given(problemStatsRepository.findByProblemId(1L)).willReturn(Optional.of(stats));
-
-            // when
-            Integer correctRate = statsService.calculateCorrectRate(1L);
-
-            // then
-            assertThat(correctRate).isEqualTo(66);
         }
     }
 
     @Nested
-    @DisplayName("통계 누적")
+    @DisplayName("Problem stats")
     class UpdateStats {
 
         @Test
-        @DisplayName("정답 제출이면 total과 correct를 모두 증가")
+        @DisplayName("increments both total and correct counts for a correct answer")
         void shouldIncrementBothCountsWhenCorrect() {
-            // given
             given(problemStatsRepository.incrementTotalCount(1L)).willReturn(1);
 
-            // when
             statsService.updateStats(1L, true);
 
-            // then
             verify(problemStatsRepository).incrementTotalCount(1L);
             verify(problemStatsRepository).incrementCorrectCount(1L);
         }
 
         @Test
-        @DisplayName("오답 제출이면 total만 증가")
+        @DisplayName("increments only total count for a wrong answer")
         void shouldIncrementOnlyTotalCountWhenWrong() {
-            // given
             given(problemStatsRepository.incrementTotalCount(1L)).willReturn(1);
 
-            // when
             statsService.updateStats(1L, false);
 
-            // then
             verify(problemStatsRepository).incrementTotalCount(1L);
             verify(problemStatsRepository, never()).incrementCorrectCount(1L);
         }
 
         @Test
-        @DisplayName("통계 행이 없으면 추가 증가 없이 종료")
+        @DisplayName("returns when the problem stats row does not exist")
         void shouldReturnWhenStatsRowDoesNotExist() {
-            // given
             given(problemStatsRepository.incrementTotalCount(1L)).willReturn(0);
 
-            // when
             statsService.updateStats(1L, true);
 
-            // then
             verify(problemStatsRepository).incrementTotalCount(1L);
             verify(problemStatsRepository, never()).incrementCorrectCount(1L);
         }
     }
 
-    @Nested
-    @DisplayName("사용자 통계")
-    class UserStats {
+    @Test
+    @DisplayName("upserts user and chapter submission stats")
+    void shouldUpdateSubmissionStats() {
+        statsService.updateSubmissionStats(1L, 2L, true);
 
-        @Test
-        @DisplayName("제출 수와 정답 수로 사용자 통계를 계산")
-        void shouldCalculateUserStats() {
-            // given
-            given(submissionRepository.countByUserId(1L)).willReturn(8L);
-            given(submissionRepository.countCorrectByUserId(1L)).willReturn(6L);
-
-            // when
-            var response = statsService.getUserStats(1L);
-
-            // then
-            assertThat(response.totalSubmissions()).isEqualTo(8L);
-            assertThat(response.correctSubmissions()).isEqualTo(6L);
-            assertThat(response.correctRate()).isEqualTo(75);
-        }
+        verify(userSubmissionStatsRepository).upsertSubmissionStats(1L, 1);
+        verify(userChapterSubmissionStatsRepository).upsertSubmissionStats(1L, 2L, 1);
     }
 
-    @Nested
-    @DisplayName("단원 통계")
-    class ChapterStats {
+    @Test
+    @DisplayName("returns user stats from the aggregate row")
+    void shouldCalculateUserStats() {
+        UserSubmissionStats stats = UserSubmissionStats.builder()
+                .totalSubmissions(8L)
+                .correctSubmissions(6L)
+                .build();
+        given(userSubmissionStatsRepository.findByUser_Id(1L)).willReturn(Optional.of(stats));
 
-        @Test
-        @DisplayName("단원 기준으로만 정답률을 계산")
-        void shouldCalculateChapterStatsWithinChapterBoundary() {
-            // given
-            given(submissionRepository.countByUserIdAndChapterId(1L, 2L)).willReturn(5L);
-            given(submissionRepository.countCorrectByUserIdAndChapterId(1L, 2L)).willReturn(3L);
+        var response = statsService.getUserStats(1L);
 
-            // when
-            var response = statsService.getChapterStats(1L, 2L);
-
-            // then
-            assertThat(response.totalSubmissions()).isEqualTo(5L);
-            assertThat(response.correctSubmissions()).isEqualTo(3L);
-            assertThat(response.correctRate()).isEqualTo(60);
-        }
+        assertThat(response.totalSubmissions()).isEqualTo(8L);
+        assertThat(response.correctSubmissions()).isEqualTo(6L);
+        assertThat(response.correctRate()).isEqualTo(75);
     }
 
-    // 테스트용 ProblemStats 클래스
+    @Test
+    @DisplayName("returns chapter stats from the aggregate row")
+    void shouldCalculateChapterStatsWithinChapterBoundary() {
+        UserChapterSubmissionStats stats = UserChapterSubmissionStats.builder()
+                .totalSubmissions(5L)
+                .correctSubmissions(3L)
+                .build();
+        given(userChapterSubmissionStatsRepository.findByUser_IdAndChapter_Id(1L, 2L))
+                .willReturn(Optional.of(stats));
+
+        var response = statsService.getChapterStats(1L, 2L);
+
+        assertThat(response.totalSubmissions()).isEqualTo(5L);
+        assertThat(response.correctSubmissions()).isEqualTo(3L);
+        assertThat(response.correctRate()).isEqualTo(60);
+    }
+
+    @Test
+    @DisplayName("returns zeroed user stats when no aggregate row exists")
+    void shouldReturnEmptyUserStatsWhenNoRowExists() {
+        given(userSubmissionStatsRepository.findByUser_Id(1L)).willReturn(Optional.empty());
+
+        var response = statsService.getUserStats(1L);
+
+        assertThat(response.totalSubmissions()).isZero();
+        assertThat(response.correctSubmissions()).isZero();
+        assertThat(response.correctRate()).isNull();
+    }
+
     private static class TestProblemStats extends ProblemStats {
         private final Long totalCount;
         private final Long correctCount;

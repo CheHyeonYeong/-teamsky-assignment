@@ -11,8 +11,6 @@ import com.teamsky.learning.problem.entity.ProblemType;
 import com.teamsky.learning.stats.StatsService;
 import com.teamsky.learning.submission.entity.AnswerStatus;
 import com.teamsky.learning.submission.entity.Submission;
-import com.teamsky.learning.submission.entity.UserChapterState;
-import com.teamsky.learning.submission.entity.UserProblemState;
 import com.teamsky.learning.submission.request.SkipRequest;
 import com.teamsky.learning.submission.request.SubmitRequest;
 import com.teamsky.learning.submission.response.SubmitResponse;
@@ -30,9 +28,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -250,11 +248,11 @@ class SubmissionServiceTest {
     @DisplayName("records time spent in the saved submission")
     void shouldRecordTimeSpent() {
         given(userService.findById(1L)).willReturn(testUser);
-        given(problemService.findById(1L)).willReturn(subjectiveProblem);
-        given(userProblemStateRepository.findByUser_IdAndProblem_Id(1L, 1L)).willReturn(Optional.empty());
+        given(problemService.findByIdWithAnswers(1L)).willReturn(subjectiveProblem);
 
         ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
-        given(submissionRepository.save(submissionCaptor.capture())).willAnswer(invocation -> invocation.getArgument(0));
+        given(submissionRepository.save(submissionCaptor.capture()))
+                .willAnswer(invocation -> withPersistedId(invocation.getArgument(0)));
 
         SubmitRequest request = new SubmitRequest(
                 1L, 1L, ProblemType.SUBJECTIVE,
@@ -267,12 +265,11 @@ class SubmissionServiceTest {
     }
 
     @Test
-    @DisplayName("creates a new user problem state on first submission")
-    void shouldCreateUserProblemStateOnFirstSubmission() {
+    @DisplayName("upserts user problem state on submission")
+    void shouldUpsertUserProblemStateOnSubmission() {
         given(userService.findById(1L)).willReturn(testUser);
-        given(problemService.findById(1L)).willReturn(subjectiveProblem);
-        given(userProblemStateRepository.findByUser_IdAndProblem_Id(1L, 1L)).willReturn(Optional.empty());
-        given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(problemService.findByIdWithAnswers(1L)).willReturn(subjectiveProblem);
+        given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> withPersistedId(invocation.getArgument(0)));
 
         SubmitRequest request = new SubmitRequest(
                 1L, 1L, ProblemType.SUBJECTIVE,
@@ -281,96 +278,69 @@ class SubmissionServiceTest {
 
         submissionService.submit(request);
 
-        ArgumentCaptor<UserProblemState> stateCaptor = ArgumentCaptor.forClass(UserProblemState.class);
-        verify(userProblemStateRepository).save(stateCaptor.capture());
-        assertThat(stateCaptor.getValue().getAttemptCount()).isEqualTo(1L);
-        assertThat(stateCaptor.getValue().getLastAnswerStatus()).isEqualTo(AnswerStatus.CORRECT);
-        assertThat(stateCaptor.getValue().isSolved()).isTrue();
+        verify(userProblemStateRepository).upsertSubmissionState(1L, 1L, 100L, "CORRECT", true);
+        verify(statsService).updateSubmissionStats(1L, 1L, true);
     }
 
     @Test
-    @DisplayName("updates the existing user problem state on resubmission")
-    void shouldUpdateExistingUserProblemStateOnResubmission() {
-        Submission previousSubmission = Submission.builder()
-                .user(testUser)
-                .problem(subjectiveProblem)
-                .answerStatus(AnswerStatus.WRONG)
-                .userAnswer("Busan")
-                .timeSpentSeconds(10L)
-                .hintUsed(false)
-                .build();
-
-        UserProblemState existingState = UserProblemState.builder()
-                .user(testUser)
-                .problem(subjectiveProblem)
-                .lastSubmission(previousSubmission)
-                .lastAnswerStatus(AnswerStatus.WRONG)
-                .solved(false)
-                .attemptCount(1L)
-                .build();
-
+    @DisplayName("upserts wrong submission state with the latest status")
+    void shouldUpsertWrongSubmissionState() {
         given(userService.findById(1L)).willReturn(testUser);
-        given(problemService.findById(1L)).willReturn(subjectiveProblem);
-        given(userProblemStateRepository.findByUser_IdAndProblem_Id(1L, 1L)).willReturn(Optional.of(existingState));
-        given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(problemService.findByIdWithAnswers(1L)).willReturn(subjectiveProblem);
+        given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> withPersistedId(invocation.getArgument(0)));
 
         SubmitRequest request = new SubmitRequest(
                 1L, 1L, ProblemType.SUBJECTIVE,
-                null, "Seoul", null, false
+                null, "Busan", null, false
         );
 
         submissionService.submit(request);
 
-        ArgumentCaptor<UserProblemState> stateCaptor = ArgumentCaptor.forClass(UserProblemState.class);
-        verify(userProblemStateRepository).save(stateCaptor.capture());
-        assertThat(stateCaptor.getValue().getAttemptCount()).isEqualTo(2L);
-        assertThat(stateCaptor.getValue().getLastAnswerStatus()).isEqualTo(AnswerStatus.CORRECT);
-        assertThat(stateCaptor.getValue().isSolved()).isTrue();
+        verify(userProblemStateRepository).upsertSubmissionState(1L, 1L, 100L, "WRONG", false);
+        verify(statsService).updateSubmissionStats(1L, 1L, false);
     }
 
     @Test
-    @DisplayName("creates chapter skip state when there is no previous state")
-    void shouldCreateSkipStateWithinChapter() {
-        given(userService.findById(1L)).willReturn(testUser);
-        given(problemService.findById(1L)).willReturn(subjectiveProblem);
-        given(chapterService.findById(1L)).willReturn(testChapter);
-        given(userChapterStateRepository.findByUser_IdAndChapter_Id(1L, 1L)).willReturn(Optional.empty());
+    @DisplayName("upserts chapter skip state")
+    void shouldUpsertSkipStateWithinChapter() {
+        given(problemService.findByIdInChapter(1L, 1L)).willReturn(subjectiveProblem);
 
         submissionService.skipProblem(new SkipRequest(1L, 1L, 1L));
 
-        ArgumentCaptor<UserChapterState> stateCaptor = ArgumentCaptor.forClass(UserChapterState.class);
-        verify(userChapterStateRepository).save(stateCaptor.capture());
-        assertThat(stateCaptor.getValue().getLastSkippedProblem()).isEqualTo(subjectiveProblem);
+        verify(userService).validateUserExists(1L);
+        verify(chapterService).validateChapterExists(1L);
+        verify(userChapterStateRepository).upsertLastSkippedProblem(1L, 1L, 1L);
     }
 
     @Test
-    @DisplayName("updates chapter skip state instead of appending rows")
-    void shouldUpdateExistingSkipStateWithinChapter() {
-        UserChapterState existingState = UserChapterState.create(testUser, testChapter, multipleChoiceProblem);
+    @DisplayName("rejects skip requests when the problem does not belong to the chapter")
+    void shouldRejectSkipWhenProblemIsOutsideChapter() {
+        given(problemService.findByIdInChapter(1L, 1L))
+                .willThrow(new com.teamsky.learning.common.exception.BusinessException(
+                        com.teamsky.learning.common.exception.ErrorCode.PROBLEM_NOT_FOUND
+                ));
 
-        given(userService.findById(1L)).willReturn(testUser);
-        given(problemService.findById(1L)).willReturn(subjectiveProblem);
-        given(chapterService.findById(1L)).willReturn(testChapter);
-        given(userChapterStateRepository.findByUser_IdAndChapter_Id(1L, 1L)).willReturn(Optional.of(existingState));
+        assertThatThrownBy(() -> submissionService.skipProblem(new SkipRequest(1L, 1L, 1L)))
+                .isInstanceOf(com.teamsky.learning.common.exception.BusinessException.class)
+                .hasMessage("Problem not found");
 
-        submissionService.skipProblem(new SkipRequest(1L, 1L, 1L));
-
-        ArgumentCaptor<UserChapterState> stateCaptor = ArgumentCaptor.forClass(UserChapterState.class);
-        verify(userChapterStateRepository).save(stateCaptor.capture());
-        assertThat(stateCaptor.getValue().getLastSkippedProblem()).isEqualTo(subjectiveProblem);
+        verify(userChapterStateRepository, never()).upsertLastSkippedProblem(anyLong(), anyLong(), anyLong());
     }
 
     private void stubMultipleChoiceSubmit() {
         given(userService.findById(1L)).willReturn(testUser);
-        given(problemService.findById(1L)).willReturn(multipleChoiceProblem);
-        given(userProblemStateRepository.findByUser_IdAndProblem_Id(1L, 1L)).willReturn(Optional.empty());
-        given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(problemService.findByIdWithAnswers(1L)).willReturn(multipleChoiceProblem);
+        given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> withPersistedId(invocation.getArgument(0)));
     }
 
     private void stubSubjectiveSubmit() {
         given(userService.findById(1L)).willReturn(testUser);
-        given(problemService.findById(1L)).willReturn(subjectiveProblem);
-        given(userProblemStateRepository.findByUser_IdAndProblem_Id(1L, 1L)).willReturn(Optional.empty());
-        given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(problemService.findByIdWithAnswers(1L)).willReturn(subjectiveProblem);
+        given(submissionRepository.save(any(Submission.class))).willAnswer(invocation -> withPersistedId(invocation.getArgument(0)));
+    }
+
+    private Submission withPersistedId(Submission submission) {
+        ReflectionTestUtils.setField(submission, "id", 100L);
+        return submission;
     }
 }

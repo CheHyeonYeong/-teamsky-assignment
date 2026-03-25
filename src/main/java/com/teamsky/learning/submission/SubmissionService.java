@@ -1,7 +1,6 @@
 package com.teamsky.learning.submission;
 
 import com.teamsky.learning.chapter.ChapterService;
-import com.teamsky.learning.chapter.entity.Chapter;
 import com.teamsky.learning.common.exception.BusinessException;
 import com.teamsky.learning.common.exception.ErrorCode;
 import com.teamsky.learning.problem.ProblemService;
@@ -11,8 +10,6 @@ import com.teamsky.learning.problem.entity.ProblemType;
 import com.teamsky.learning.stats.StatsService;
 import com.teamsky.learning.submission.entity.AnswerStatus;
 import com.teamsky.learning.submission.entity.Submission;
-import com.teamsky.learning.submission.entity.UserChapterState;
-import com.teamsky.learning.submission.entity.UserProblemState;
 import com.teamsky.learning.submission.request.SkipRequest;
 import com.teamsky.learning.submission.request.SubmitRequest;
 import com.teamsky.learning.submission.response.SubmissionDetailResponse;
@@ -47,7 +44,7 @@ public class SubmissionService {
     @Transactional
     public SubmitResponse submit(SubmitRequest request) {
         User user = userService.findById(request.userId());
-        Problem problem = problemService.findById(request.problemId());
+        Problem problem = problemService.findByIdWithAnswers(request.problemId());
 
         AnswerStatus status = judgeAnswer(problem, request);
 
@@ -61,7 +58,14 @@ public class SubmissionService {
                 .build();
 
         Submission savedSubmission = submissionRepository.save(submission);
-        upsertUserProblemState(user, problem, savedSubmission);
+        userProblemStateRepository.upsertSubmissionState(
+                user.getId(),
+                problem.getId(),
+                savedSubmission.getId(),
+                status.name(),
+                status == AnswerStatus.CORRECT
+        );
+        statsService.updateSubmissionStats(user.getId(), problem.getChapter().getId(), status == AnswerStatus.CORRECT);
 
         if (!Boolean.TRUE.equals(request.hintUsed())) {
             statsService.updateStats(problem.getId(), status == AnswerStatus.CORRECT);
@@ -72,25 +76,21 @@ public class SubmissionService {
 
     @Transactional
     public void skipProblem(SkipRequest request) {
-        User user = userService.findById(request.userId());
-        Problem problem = problemService.findById(request.problemId());
-        Chapter chapter = chapterService.findById(request.chapterId());
+        userService.validateUserExists(request.userId());
+        chapterService.validateChapterExists(request.chapterId());
+        Problem problem = problemService.findByIdInChapter(request.problemId(), request.chapterId());
 
-        UserChapterState userChapterState = userChapterStateRepository
-                .findByUser_IdAndChapter_Id(request.userId(), request.chapterId())
-                .map(existingState -> {
-                    existingState.updateLastSkippedProblem(problem);
-                    return existingState;
-                })
-                .orElseGet(() -> UserChapterState.create(user, chapter, problem));
-
-        userChapterStateRepository.save(userChapterState);
+        userChapterStateRepository.upsertLastSkippedProblem(
+                request.userId(),
+                request.chapterId(),
+                problem.getId()
+        );
     }
 
     public SubmissionDetailResponse getSubmissionDetail(Long userId, Long problemId) {
         userService.validateUserExists(userId);
 
-        Submission submission = submissionRepository.findLatestByUserIdAndProblemId(userId, problemId)
+        Submission submission = submissionRepository.findFirstByUser_IdAndProblem_IdOrderByCreatedAtDescIdDesc(userId, problemId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SUBMISSION_NOT_FOUND));
 
         Integer correctRate = statsService.calculateCorrectRate(problemId);
@@ -102,8 +102,7 @@ public class SubmissionService {
         userService.validateUserExists(userId);
         chapterService.validateChapterExists(chapterId);
 
-        return submissionRepository.findByUserIdAndChapterId(userId, chapterId, pageable)
-                .map(SubmissionHistoryResponse::of);
+        return submissionRepository.findHistoryResponsesByUserIdAndChapterId(userId, chapterId, pageable);
     }
 
     public Page<SubmissionHistoryResponse> getWrongSubmissions(Long userId, Pageable pageable) {
@@ -111,8 +110,7 @@ public class SubmissionService {
 
         List<AnswerStatus> wrongStatuses = List.of(AnswerStatus.WRONG, AnswerStatus.PARTIAL);
 
-        return submissionRepository.findByUserIdAndAnswerStatusIn(userId, wrongStatuses, pageable)
-                .map(SubmissionHistoryResponse::of);
+        return submissionRepository.findWrongSubmissionResponsesByUserId(userId, wrongStatuses, pageable);
     }
 
     private AnswerStatus judgeAnswer(Problem problem, SubmitRequest request) {
@@ -160,17 +158,5 @@ public class SubmissionService {
         boolean isStrictSubsetOfCorrectAnswers = correctSet.containsAll(userSet);
 
         return isStrictSubsetOfCorrectAnswers ? AnswerStatus.PARTIAL : AnswerStatus.WRONG;
-    }
-
-    private void upsertUserProblemState(User user, Problem problem, Submission submission) {
-        UserProblemState userProblemState = userProblemStateRepository
-                .findByUser_IdAndProblem_Id(user.getId(), problem.getId())
-                .map(existingState -> {
-                    existingState.recordSubmission(submission);
-                    return existingState;
-                })
-                .orElseGet(() -> UserProblemState.create(user, problem, submission));
-
-        userProblemStateRepository.save(userProblemState);
     }
 }

@@ -13,7 +13,8 @@ import lombok.NoArgsConstructor;
 @Table(name = "submissions",
         indexes = {
                 @Index(name = "idx_submission_user_problem", columnList = "user_id, problem_id"),
-                @Index(name = "idx_submission_user", columnList = "user_id")
+                @Index(name = "idx_submission_user_created", columnList = "user_id, created_at"),
+                @Index(name = "idx_submission_user_status_created", columnList = "user_id, answer_status, created_at")
         })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
