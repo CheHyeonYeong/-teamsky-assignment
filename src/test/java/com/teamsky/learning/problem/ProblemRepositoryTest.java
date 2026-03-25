@@ -50,7 +50,14 @@ class ProblemRepositoryTest {
         entityManager.flush();
         entityManager.clear();
 
-        List<Long> result = problemRepository.findRandomAvailableProblemIds(
+        long count = problemRepository.countAvailableProblems(
+                chapter.getId(),
+                user.getId(),
+                Difficulty.LOW,
+                skipped.getId()
+        );
+
+        List<Long> result = problemRepository.findAvailableProblemIds(
                 chapter.getId(),
                 user.getId(),
                 Difficulty.LOW,
@@ -58,6 +65,7 @@ class ProblemRepositoryTest {
                 PageRequest.of(0, 10)
         );
 
+        assertThat(count).isEqualTo(1L);
         assertThat(result).containsExactly(candidate.getId());
     }
 
@@ -70,22 +78,34 @@ class ProblemRepositoryTest {
         Problem wrong = persistProblem(chapter, "오답 문제", Difficulty.LOW);
         Problem partial = persistProblem(chapter, "부분정답 문제", Difficulty.MEDIUM);
         Problem correct = persistProblem(chapter, "정답 문제", Difficulty.HIGH);
+        Problem correctedLater = persistProblem(chapter, "나중에 맞힌 문제", Difficulty.LOW);
         Problem otherChapterWrong = persistProblem(otherChapter, "다른 단원 오답 문제", Difficulty.LOW);
         persistSubmission(user, wrong, AnswerStatus.WRONG);
         persistSubmission(user, partial, AnswerStatus.PARTIAL);
         persistSubmission(user, correct, AnswerStatus.CORRECT);
+        persistSubmission(user, correctedLater, AnswerStatus.WRONG);
+        persistSubmission(user, correctedLater, AnswerStatus.CORRECT);
         persistSubmission(user, otherChapterWrong, AnswerStatus.WRONG);
         entityManager.flush();
         entityManager.clear();
 
-        List<Long> result = problemRepository.findRandomWrongProblemIdsByUserIdAndChapterId(
+        long count = problemRepository.countWrongProblemIdsByUserIdAndChapterId(
+                user.getId(),
+                chapter.getId(),
+                List.of(AnswerStatus.WRONG, AnswerStatus.PARTIAL)
+        );
+
+        List<Long> result = problemRepository.findWrongProblemIdsByUserIdAndChapterId(
                 user.getId(),
                 chapter.getId(),
                 List.of(AnswerStatus.WRONG, AnswerStatus.PARTIAL),
                 PageRequest.of(0, 10)
         );
 
-        assertThat(result).containsExactlyInAnyOrder(wrong.getId(), partial.getId());
+        assertThat(count).isEqualTo(2L);
+        assertThat(result)
+                .containsExactlyInAnyOrder(wrong.getId(), partial.getId())
+                .doesNotContain(correctedLater.getId(), correct.getId(), otherChapterWrong.getId());
     }
 
     private User persistUser(String name) {

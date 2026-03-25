@@ -6,7 +6,9 @@ import com.teamsky.learning.problem.ProblemService;
 import com.teamsky.learning.problem.entity.*;
 import com.teamsky.learning.stats.StatsService;
 import com.teamsky.learning.submission.entity.AnswerStatus;
+import com.teamsky.learning.submission.entity.SkippedProblem;
 import com.teamsky.learning.submission.entity.Submission;
+import com.teamsky.learning.submission.request.SkipRequest;
 import com.teamsky.learning.submission.request.SubmitRequest;
 import com.teamsky.learning.submission.response.SubmitResponse;
 import com.teamsky.learning.user.UserService;
@@ -140,8 +142,8 @@ class SubmissionServiceTest {
         }
 
         @Test
-        @DisplayName("정답을 1개라도 포함하고 오답도 포함하면 PARTIAL 반환")
-        void shouldReturnPartialWhenContainsOneCorrectAndWrong() {
+        @DisplayName("정답과 오답을 함께 선택하면 WRONG 반환")
+        void shouldReturnWrongWhenContainsCorrectAndWrong() {
             // given
             given(userService.findById(1L)).willReturn(testUser);
             given(problemService.findById(1L)).willReturn(testProblem);
@@ -156,7 +158,7 @@ class SubmissionServiceTest {
             SubmitResponse response = submissionService.submit(request);
 
             // then
-            assertThat(response.answerStatus()).isEqualTo(AnswerStatus.PARTIAL);
+            assertThat(response.answerStatus()).isEqualTo(AnswerStatus.WRONG);
         }
 
         @Test
@@ -347,6 +349,38 @@ class SubmissionServiceTest {
             // then
             Submission savedSubmission = submissionCaptor.getValue();
             assertThat(savedSubmission.getTimeSpentSeconds()).isEqualTo(120L);
+        }
+    }
+
+    @Nested
+    @DisplayName("문제 넘기기")
+    class SkipProblemHandling {
+
+        @BeforeEach
+        void setUp() {
+            testProblem = Problem.builder()
+                    .chapter(testChapter)
+                    .content("건너뛸 문제")
+                    .problemType(ProblemType.SUBJECTIVE)
+                    .difficulty(Difficulty.LOW)
+                    .explanation("해설")
+                    .build();
+        }
+
+        @Test
+        @DisplayName("같은 단원 이전 skip 기록을 지우고 마지막 1건만 남긴다")
+        void shouldReplacePreviousSkipStateWithinChapter() {
+            given(userService.findById(1L)).willReturn(testUser);
+            given(problemService.findById(1L)).willReturn(testProblem);
+            given(chapterService.findById(1L)).willReturn(testChapter);
+            given(skippedProblemRepository.save(any(SkippedProblem.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+            SkipRequest request = new SkipRequest(1L, 1L, 1L);
+
+            submissionService.skipProblem(request);
+
+            verify(skippedProblemRepository).deleteByUserIdAndChapterId(1L, 1L);
+            verify(skippedProblemRepository).save(any(SkippedProblem.class));
         }
     }
 }

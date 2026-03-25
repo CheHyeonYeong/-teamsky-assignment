@@ -73,6 +73,8 @@ public class SubmissionService {
         Problem problem = problemService.findById(request.problemId());
         Chapter chapter = chapterService.findById(request.chapterId());
 
+        skippedProblemRepository.deleteByUserIdAndChapterId(request.userId(), request.chapterId());
+
         SkippedProblem skippedProblem = SkippedProblem.builder()
                 .user(user)
                 .problem(problem)
@@ -152,8 +154,8 @@ public class SubmissionService {
             return AnswerStatus.CORRECT;
         }
 
-        boolean hasCorrectAnswer = userSet.stream().anyMatch(correctSet::contains);
+        boolean isStrictSubsetOfCorrectAnswers = correctSet.containsAll(userSet);
 
-        return hasCorrectAnswer ? AnswerStatus.PARTIAL : AnswerStatus.WRONG;
+        return isStrictSubsetOfCorrectAnswers ? AnswerStatus.PARTIAL : AnswerStatus.WRONG;
     }
 }

@@ -41,6 +41,23 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
             @Param("excludedIds") List<Long> excludedIds);
 
     @Query("""
+            SELECT COUNT(p.id) FROM Problem p
+            WHERE p.chapter.id = :chapterId
+            AND (:difficulty IS NULL OR p.difficulty = :difficulty)
+            AND (:lastSkippedProblemId IS NULL OR p.id <> :lastSkippedProblemId)
+            AND NOT EXISTS (
+                SELECT s.id FROM Submission s
+                WHERE s.user.id = :userId
+                AND s.problem.id = p.id
+            )
+            """)
+    long countAvailableProblems(
+            @Param("chapterId") Long chapterId,
+            @Param("userId") Long userId,
+            @Param("difficulty") Difficulty difficulty,
+            @Param("lastSkippedProblemId") Long lastSkippedProblemId);
+
+    @Query("""
             SELECT p.id FROM Problem p
             WHERE p.chapter.id = :chapterId
             AND (:difficulty IS NULL OR p.difficulty = :difficulty)
@@ -50,9 +67,9 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
                 WHERE s.user.id = :userId
                 AND s.problem.id = p.id
             )
-            ORDER BY function('RAND')
+            ORDER BY p.id
             """)
-    List<Long> findRandomAvailableProblemIds(
+    List<Long> findAvailableProblemIds(
             @Param("chapterId") Long chapterId,
             @Param("userId") Long userId,
             @Param("difficulty") Difficulty difficulty,
@@ -60,13 +77,42 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
             Pageable pageable);
 
     @Query("""
-            SELECT DISTINCT s.problem.id FROM Submission s
-            WHERE s.user.id = :userId
-            AND s.problem.chapter.id = :chapterId
-            AND s.answerStatus IN :statuses
-            ORDER BY function('RAND')
+            SELECT COUNT(p.id) FROM Problem p
+            WHERE p.chapter.id = :chapterId
+            AND EXISTS (
+                SELECT s.id FROM Submission s
+                WHERE s.user.id = :userId
+                AND s.problem.id = p.id
+                AND s.id = (
+                    SELECT MAX(s2.id) FROM Submission s2
+                    WHERE s2.user.id = :userId
+                    AND s2.problem.id = p.id
+                )
+                AND s.answerStatus IN :statuses
+            )
             """)
-    List<Long> findRandomWrongProblemIdsByUserIdAndChapterId(
+    long countWrongProblemIdsByUserIdAndChapterId(
+            @Param("userId") Long userId,
+            @Param("chapterId") Long chapterId,
+            @Param("statuses") List<AnswerStatus> statuses);
+
+    @Query("""
+            SELECT p.id FROM Problem p
+            WHERE p.chapter.id = :chapterId
+            AND EXISTS (
+                SELECT s.id FROM Submission s
+                WHERE s.user.id = :userId
+                AND s.problem.id = p.id
+                AND s.id = (
+                    SELECT MAX(s2.id) FROM Submission s2
+                    WHERE s2.user.id = :userId
+                    AND s2.problem.id = p.id
+                )
+                AND s.answerStatus IN :statuses
+            )
+            ORDER BY p.id
+            """)
+    List<Long> findWrongProblemIdsByUserIdAndChapterId(
             @Param("userId") Long userId,
             @Param("chapterId") Long chapterId,
             @Param("statuses") List<AnswerStatus> statuses,

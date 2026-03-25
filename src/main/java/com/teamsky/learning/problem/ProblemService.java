@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 @RequiredArgsConstructor
@@ -39,15 +40,23 @@ public class ProblemService {
                 .findLastSkippedProblemId(request.userId(), request.chapterId())
                 .orElse(null);
 
-        Long selectedProblemId = problemRepository.findRandomAvailableProblemIds(
+        long totalAvailableProblems = problemRepository.countAvailableProblems(
                 request.chapterId(),
                 request.userId(),
                 request.difficulty(),
-                lastSkippedProblemId,
-                PageRequest.of(0, 1)
-        ).stream()
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.NO_MORE_PROBLEMS));
+                lastSkippedProblemId
+        );
+
+        Long selectedProblemId = selectRandomProblemId(
+                totalAvailableProblems,
+                randomIndex -> problemRepository.findAvailableProblemIds(
+                        request.chapterId(),
+                        request.userId(),
+                        request.difficulty(),
+                        lastSkippedProblemId,
+                        PageRequest.of(randomIndex, 1)
+                )
+        );
 
         Problem selectedProblem = findById(selectedProblemId);
         Integer correctRate = statsService.calculateCorrectRate(selectedProblem.getId());
@@ -59,14 +68,21 @@ public class ProblemService {
         userService.validateUserExists(userId);
         chapterService.validateChapterExists(chapterId);
 
-        Long selectedProblemId = problemRepository.findRandomWrongProblemIdsByUserIdAndChapterId(
+        long totalWrongProblems = problemRepository.countWrongProblemIdsByUserIdAndChapterId(
                 userId,
                 chapterId,
-                WRONG_STATUSES,
-                PageRequest.of(0, 1)
-        ).stream()
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.NO_MORE_PROBLEMS));
+                WRONG_STATUSES
+        );
+
+        Long selectedProblemId = selectRandomProblemId(
+                totalWrongProblems,
+                randomIndex -> problemRepository.findWrongProblemIdsByUserIdAndChapterId(
+                        userId,
+                        chapterId,
+                        WRONG_STATUSES,
+                        PageRequest.of(randomIndex, 1)
+                )
+        );
 
         Problem problem = findById(selectedProblemId);
         Integer correctRate = statsService.calculateCorrectRate(problem.getId());
@@ -77,5 +93,17 @@ public class ProblemService {
     public Problem findById(Long problemId) {
         return problemRepository.findById(problemId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROBLEM_NOT_FOUND));
+    }
+
+    private Long selectRandomProblemId(long totalCount, java.util.function.IntFunction<List<Long>> pageFetcher) {
+        if (totalCount == 0) {
+            throw new BusinessException(ErrorCode.NO_MORE_PROBLEMS);
+        }
+
+        int randomIndex = Math.toIntExact(ThreadLocalRandom.current().nextLong(totalCount));
+
+        return pageFetcher.apply(randomIndex).stream()
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.NO_MORE_PROBLEMS));
     }
 }

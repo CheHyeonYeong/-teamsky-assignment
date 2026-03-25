@@ -9,6 +9,8 @@ import java.util.Optional;
 
 public interface SkippedProblemRepository extends JpaRepository<SkippedProblem, Long> {
 
+    void deleteByUserIdAndChapterId(Long userId, Long chapterId);
+
     @Query("""
             SELECT sp.problem.id FROM SkippedProblem sp
             WHERE sp.user.id = :userId
