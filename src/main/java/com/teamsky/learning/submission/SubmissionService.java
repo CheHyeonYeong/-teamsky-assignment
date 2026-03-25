@@ -85,7 +85,7 @@ public class SubmissionService {
     public SubmissionDetailResponse getSubmissionDetail(Long userId, Long problemId) {
         userService.validateUserExists(userId);
 
-        Submission submission = submissionRepository.findByUserIdAndProblemId(userId, problemId)
+        Submission submission = submissionRepository.findLatestByUserIdAndProblemId(userId, problemId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SUBMISSION_NOT_FOUND));
 
         Integer correctRate = statsService.calculateCorrectRate(problemId);

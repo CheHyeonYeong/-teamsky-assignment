@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init:*)",
+      "Bash(git remote add:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(gh api:*)",
+      "Bash(curl:*)",
+      "Bash(./gradlew.bat build:*)",
+      "Bash(java -version:*)",
+      "Bash(where:*)",
+      "Bash(JAVA_HOME=\"/c/Users/hyeonyeong/.jdks/openjdk-21.0.2\" ./gradlew.bat build:*)",
+      "Bash(ls:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nchore: 프로젝트 초기 설정\n\n- Spring Boot 3.4.1, Java 21 설정\n- Gradle 8.13 wrapper 설정\n- 의존성 추가 \\(JPA, MySQL, Validation, Swagger\\)\nEOF\n\\)\")",
+      "Bash(git commit:*)",
+      "Bash(mysql:*)",
+      "Bash(docker:*)"
+    ]
+  }
+}

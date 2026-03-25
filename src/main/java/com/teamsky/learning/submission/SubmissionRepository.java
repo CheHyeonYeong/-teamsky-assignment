@@ -26,7 +26,16 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
             @Param("userId") Long userId,
             @Param("chapterId") Long chapterId);
 
-    Optional<Submission> findByUserIdAndProblemId(Long userId, Long problemId);
+    @Query("""
+            SELECT s FROM Submission s
+            WHERE s.user.id = :userId
+            AND s.problem.id = :problemId
+            ORDER BY s.createdAt DESC
+            LIMIT 1
+            """)
+    Optional<Submission> findLatestByUserIdAndProblemId(
+            @Param("userId") Long userId,
+            @Param("problemId") Long problemId);
 
     @Query("""
             SELECT s FROM Submission s
@@ -59,4 +68,16 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
 
     @Query("SELECT COUNT(s) FROM Submission s WHERE s.problem.id = :problemId AND s.answerStatus = 'CORRECT'")
     long countCorrectByProblemId(@Param("problemId") Long problemId);
+
+    @Query("SELECT COUNT(s) FROM Submission s WHERE s.user.id = :userId AND s.problem.chapter.id = :chapterId")
+    long countByUserIdAndChapterId(@Param("userId") Long userId, @Param("chapterId") Long chapterId);
+
+    @Query("SELECT COUNT(s) FROM Submission s WHERE s.user.id = :userId AND s.problem.chapter.id = :chapterId AND s.answerStatus = 'CORRECT'")
+    long countCorrectByUserIdAndChapterId(@Param("userId") Long userId, @Param("chapterId") Long chapterId);
+
+    @Query("SELECT COUNT(s) FROM Submission s WHERE s.user.id = :userId")
+    long countByUserId(@Param("userId") Long userId);
+
+    @Query("SELECT COUNT(s) FROM Submission s WHERE s.user.id = :userId AND s.answerStatus = 'CORRECT'")
+    long countCorrectByUserId(@Param("userId") Long userId);
 }

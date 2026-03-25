@@ -5,12 +5,9 @@ import com.teamsky.learning.stats.entity.ProblemStats;
 import com.teamsky.learning.stats.response.ChapterStatsResponse;
 import com.teamsky.learning.stats.response.UserStatsResponse;
 import com.teamsky.learning.submission.SubmissionRepository;
-import com.teamsky.learning.submission.entity.AnswerStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -52,13 +49,8 @@ public class StatsService {
     }
 
     public ChapterStatsResponse getChapterStats(Long userId, Long chapterId) {
-        long totalSubmissions = submissionRepository.findByUserIdAndChapterId(userId, chapterId, null)
-                .getTotalElements();
-
-        List<AnswerStatus> correctStatuses = List.of(AnswerStatus.CORRECT);
-        long correctSubmissions = submissionRepository
-                .findByUserIdAndAnswerStatusIn(userId, correctStatuses, null)
-                .getTotalElements();
+        long totalSubmissions = submissionRepository.countByUserIdAndChapterId(userId, chapterId);
+        long correctSubmissions = submissionRepository.countCorrectByUserIdAndChapterId(userId, chapterId);
 
         Integer correctRate = totalSubmissions > 0
                 ? (int) Math.round((double) correctSubmissions / totalSubmissions * 100)
@@ -68,6 +60,13 @@ public class StatsService {
     }
 
     public UserStatsResponse getUserStats(Long userId) {
-        return new UserStatsResponse(userId, 0L, 0L, null);
+        long totalSubmissions = submissionRepository.countByUserId(userId);
+        long correctSubmissions = submissionRepository.countCorrectByUserId(userId);
+
+        Integer correctRate = totalSubmissions > 0
+                ? (int) Math.round((double) correctSubmissions / totalSubmissions * 100)
+                : null;
+
+        return new UserStatsResponse(userId, totalSubmissions, correctSubmissions, correctRate);
     }
 }
