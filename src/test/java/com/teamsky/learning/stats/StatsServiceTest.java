@@ -1,8 +1,10 @@
 package com.teamsky.learning.stats;
 
+import com.teamsky.learning.chapter.ChapterService;
 import com.teamsky.learning.stats.entity.ProblemStats;
 import com.teamsky.learning.stats.entity.UserChapterSubmissionStats;
 import com.teamsky.learning.stats.entity.UserSubmissionStats;
+import com.teamsky.learning.user.UserService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,12 @@ class StatsServiceTest {
 
     @Mock
     private UserChapterSubmissionStatsRepository userChapterSubmissionStatsRepository;
+
+    @Mock
+    private UserService userService;
+
+    @Mock
+    private ChapterService chapterService;
 
     @Nested
     @DisplayName("Correct rate")
@@ -129,6 +137,7 @@ class StatsServiceTest {
 
         var response = statsService.getUserStats(1L);
 
+        verify(userService).validateUserExists(1L);
         assertThat(response.totalSubmissions()).isEqualTo(8L);
         assertThat(response.correctSubmissions()).isEqualTo(6L);
         assertThat(response.correctRate()).isEqualTo(75);
@@ -146,6 +155,8 @@ class StatsServiceTest {
 
         var response = statsService.getChapterStats(1L, 2L);
 
+        verify(userService).validateUserExists(1L);
+        verify(chapterService).validateChapterExists(2L);
         assertThat(response.totalSubmissions()).isEqualTo(5L);
         assertThat(response.correctSubmissions()).isEqualTo(3L);
         assertThat(response.correctRate()).isEqualTo(60);
@@ -158,6 +169,7 @@ class StatsServiceTest {
 
         var response = statsService.getUserStats(1L);
 
+        verify(userService).validateUserExists(1L);
         assertThat(response.totalSubmissions()).isZero();
         assertThat(response.correctSubmissions()).isZero();
         assertThat(response.correctRate()).isNull();

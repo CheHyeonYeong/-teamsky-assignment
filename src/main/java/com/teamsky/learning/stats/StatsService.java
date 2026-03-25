@@ -1,11 +1,13 @@
 package com.teamsky.learning.stats;
 
+import com.teamsky.learning.chapter.ChapterService;
 import com.teamsky.learning.problem.entity.Problem;
 import com.teamsky.learning.stats.entity.ProblemStats;
 import com.teamsky.learning.stats.entity.UserChapterSubmissionStats;
 import com.teamsky.learning.stats.entity.UserSubmissionStats;
 import com.teamsky.learning.stats.response.ChapterStatsResponse;
 import com.teamsky.learning.stats.response.UserStatsResponse;
+import com.teamsky.learning.user.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,8 +20,8 @@ public class StatsService {
     private final ProblemStatsRepository problemStatsRepository;
     private final UserSubmissionStatsRepository userSubmissionStatsRepository;
     private final UserChapterSubmissionStatsRepository userChapterSubmissionStatsRepository;
-
-    private static final int MIN_SUBMISSION_COUNT = 30;
+    private final UserService userService;
+    private final ChapterService chapterService;
 
     public Integer calculateCorrectRate(Long problemId) {
         return problemStatsRepository.findByProblemId(problemId)
@@ -55,6 +57,9 @@ public class StatsService {
     }
 
     public ChapterStatsResponse getChapterStats(Long userId, Long chapterId) {
+        userService.validateUserExists(userId);
+        chapterService.validateChapterExists(chapterId);
+
         UserChapterSubmissionStats stats = userChapterSubmissionStatsRepository
                 .findByUser_IdAndChapter_Id(userId, chapterId)
                 .orElse(null);
@@ -70,6 +75,8 @@ public class StatsService {
     }
 
     public UserStatsResponse getUserStats(Long userId) {
+        userService.validateUserExists(userId);
+
         UserSubmissionStats stats = userSubmissionStatsRepository.findByUser_Id(userId).orElse(null);
 
         long totalSubmissions = stats != null ? stats.getTotalSubmissions() : 0L;
