@@ -7,17 +7,16 @@ COPY gradle gradle
 COPY build.gradle .
 COPY gradle.properties .
 COPY settings.gradle .
-COPY app app
-COPY core core
+COPY src src
 
 RUN chmod +x ./gradlew
-RUN ./gradlew :app:bootJar --no-daemon
+RUN ./gradlew bootJar --no-daemon
 
 FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
-COPY --from=builder /app/app/build/libs/*.jar app.jar
+COPY --from=builder /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
 
