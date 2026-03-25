@@ -2,6 +2,8 @@
 
 > 이 문서는 Claude가 이 프로젝트에서 작업할 때 따라야 할 단계별 가이드입니다.
 
+> Gradle은 Java 21로 실행해야 합니다. PowerShell에서는 `.\scripts\gradlew-java21.ps1`를 기본 명령으로 사용합니다.
+
 ---
 
 ## Step 1: 프로젝트 컨텍스트 파악
@@ -61,14 +63,14 @@ PLAN.md에서 해당 유즈케이스 찾기
    - given-when-then 패턴 사용
 
 ② 실패하는 테스트 확인
-   ./gradlew test --tests "{테스트클래스명}"
+   .\scripts\gradlew-java21.ps1 test --tests "{테스트클래스명}"
 
 ③ 프로덕션 코드 구현
    - Entity → Repository → Service → Controller 순서
    - Record 클래스로 Request/Response 작성
 
 ④ 테스트 통과 확인
-   ./gradlew test
+   .\scripts\gradlew-java21.ps1 test
 
 ⑤ 리팩토링 (필요시)
 ```
@@ -135,7 +137,7 @@ for (Problem p : problems) {
 ```
 ① 코드 수정
 ② 테스트 통과 확인
-③ 기존 테스트 영향 없는지 확인 (./gradlew test)
+③ 기존 테스트 영향 없는지 확인 (.\scripts\gradlew-java21.ps1 test)
 ```
 
 ---
@@ -244,8 +246,8 @@ public ResponseEntity<ProblemResponse> getRandomProblem(...) { }
 
 ### 8.1 커밋 전 체크리스트
 ```
-□ 테스트 모두 통과 (./gradlew test)
-□ 빌드 성공 (./gradlew build)
+□ 테스트 모두 통과 (.\scripts\gradlew-java21.ps1 test)
+□ 빌드 성공 (.\scripts\gradlew-java21.ps1 build)
 □ 코드 스타일 일관성
 □ 불필요한 import 제거
 □ 주석/로그 정리
@@ -279,19 +281,19 @@ feat: 랜덤 문제 조회 API 구현
 ### 9.1 기본 명령어
 ```bash
 # 빌드 (테스트 포함)
-./gradlew build
+.\scripts\gradlew-java21.ps1 build
 
 # 테스트만 실행
-./gradlew test
+.\scripts\gradlew-java21.ps1 test
 
 # 특정 테스트만 실행
-./gradlew test --tests "SubmissionServiceTest"
+.\scripts\gradlew-java21.ps1 test --tests "SubmissionServiceTest"
 
 # 애플리케이션 실행
-./gradlew bootRun
+.\scripts\gradlew-java21.ps1 bootRun
 
 # 클린 빌드
-./gradlew clean build
+.\scripts\gradlew-java21.ps1 clean build
 ```
 
 ### 9.2 Docker
